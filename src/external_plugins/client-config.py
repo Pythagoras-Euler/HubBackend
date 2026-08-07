@@ -4,10 +4,12 @@
 # This plugin enables official web client to use dynamic configuration.
 # https://github.com/CharlesWithC/HubFrontend
 
+import os
 import uuid
 from urllib.parse import urlparse
 
 import pymysql
+import redis
 from fastapi import Header, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -272,7 +274,7 @@ def init(config: dict, print_log: bool = False):
     states = {}
 
     # Initial setup
-    conn = pymysql.connect(host = config["db_host"], user = config["db_user"], passwd = config["db_password"], db = config["db_name"])
+    conn = pymysql.connect(host = config["db_host"], port = config["db_port"], user = config["db_user"], passwd = config["db_password"], db = config["db_name"])
     cur = conn.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS ext_assets (akey TEXT, aval MEDIUMTEXT)")
     for k in ["logo", "banner", "bgimage"]:
@@ -283,6 +285,7 @@ def init(config: dict, print_log: bool = False):
 
     cur.execute("SELECT * FROM settings WHERE skey='client-config/meta'")
     t = cur.fetchall()
+    public_url = os.environ.get("HUB_PUBLIC_URL", config["domain"]).rstrip("/")
     if len(t) == 0:
         frontend_conf = {
             "abbr": config["abbr"],
@@ -295,7 +298,7 @@ def init(config: dict, print_log: bool = False):
             "distance_unit": config["distance_unit"],
             "use_highest_role_color": False,
             "domain": urlparse(config["frontend_urls"]["member"]).netloc,
-            "api_host": config["domain"],
+            "api_host": public_url,
             "plugins": config["plugins"],
             "truckersmp_vtc_id": 0,
             "logo_key": "",
@@ -304,6 +307,21 @@ def init(config: dict, print_log: bool = False):
             "gallery": []
         }
         cur.execute(f"INSERT INTO settings VALUES (NULL, 'client-config/meta', '{convertQuotation(json.dumps(frontend_conf))}')")
+    elif os.environ.get("HUB_PUBLIC_URL"):
+        # Keep the generated browser config aligned with the public origin when
+        # a deployment is moved to another domain.
+        frontend_conf = json.loads(t[0][0])
+        if frontend_conf.get("api_host") != public_url:
+            frontend_conf["api_host"] = public_url
+            cur.execute(f"UPDATE settings SET sval = '{convertQuotation(json.dumps(frontend_conf))}' WHERE skey = 'client-config/meta'")
+            try:
+                cache = redis.Redis(host=config["redis_host"], port=config["redis_port"], db=config["redis_db"], password=config["redis_password"])
+                cache.delete(f'{config["abbr"]}:client-config:meta')
+                cache.close()
+            except:
+                # A temporary cache outage should not prevent the API from
+                # starting; the cached value also has a bounded lifetime.
+                pass
 
     conn.commit()
     cur.close()
