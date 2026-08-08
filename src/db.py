@@ -231,6 +231,27 @@ def init(config, version):
         except:
             pass
 
+    # External identities must map to exactly one Drivers Hub account.  Keep
+    # these constraints separate from the best-effort legacy index creation so
+    # duplicate production data cannot silently leave OAuth/OpenID races open.
+    unique_external_id_indexes = {
+        "user_discordid_unique": "discordid",
+        "user_steamid_unique": "steamid",
+    }
+    for index_name, column_name in unique_external_id_indexes.items():
+        cur.execute("SHOW INDEX FROM user WHERE Key_name = %s", (index_name,))
+        if cur.fetchone() is not None:
+            continue
+        try:
+            cur.execute(f"CREATE UNIQUE INDEX {index_name} ON user ({column_name})")
+        except pymysql.err.IntegrityError as exc:
+            if exc.args[0] != 1062:
+                raise
+            raise RuntimeError(
+                f"Cannot enforce unique user.{column_name}: duplicate non-NULL values exist. "
+                f"Resolve duplicates before restarting backend-init."
+            ) from exc
+
     conn.commit()
     cur.close()
     conn.close()

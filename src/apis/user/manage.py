@@ -671,7 +671,7 @@ async def delete_user(request: Request, response: Response, uid: int, authorizat
             response.status_code = 428
             return {"error": ml.tr(request, "resign_before_delete", force_lang = au["language"])}
 
-        if mfa_secret != "" and not test_password_only_auth_enabled():
+        if mfa_secret != "" and not test_security_bypass_enabled():
             data = await request.json()
             try:
                 otp = data["otp"]

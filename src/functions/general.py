@@ -29,9 +29,18 @@ class Dict2Obj(object):
 class RateLimitException(Exception):
     pass
 
+def test_security_bypass_enabled():
+    """Return whether test-only CAPTCHA/MFA security challenges are bypassed."""
+    enabled_values = {"1", "true", "yes", "on"}
+    return (
+        os.environ.get("HUB_TEST_BYPASS_SECURITY_CHECKS", "false").strip().lower() in enabled_values
+        or os.environ.get("HUB_TEST_PASSWORD_ONLY_AUTH", "false").strip().lower() in enabled_values
+    )
+
+
 def test_password_only_auth_enabled():
-    """Return whether the explicit test-only authentication bypass is enabled."""
-    return os.environ.get("HUB_TEST_PASSWORD_ONLY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on"}
+    """Deprecated compatibility alias for older deployment environments."""
+    return test_security_bypass_enabled()
 
 def restart(app):
     time.sleep(3)

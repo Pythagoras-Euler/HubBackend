@@ -34,7 +34,7 @@ async def patch_password(request: Request, response: Response, authorization: st
     await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     mfa_secret = t[0][0]
-    if mfa_secret != "" and not test_password_only_auth_enabled():
+    if mfa_secret != "" and not test_security_bypass_enabled():
         data = await request.json()
         try:
             otp = data["otp"]
@@ -112,7 +112,7 @@ async def post_password_disable(request: Request, response: Response, authorizat
     await app.db.execute(dhrid, f"SELECT email, steamid, discordid, mfa_secret FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     (email, steamid, discordid, mfa_secret) = (t[0][0], t[0][1], t[0][2], t[0][3])
-    if mfa_secret != "" and not test_password_only_auth_enabled():
+    if mfa_secret != "" and not test_security_bypass_enabled():
         data = await request.json()
         try:
             otp = data["otp"]

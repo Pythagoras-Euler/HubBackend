@@ -1,11 +1,13 @@
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
+import os
 import time
 import traceback
 import uuid
 from typing import Optional
 
+import pymysql
 from fastapi import Request, Response
 
 import multilang as ml
@@ -16,9 +18,6 @@ from functions.discord import DiscordAuth
 
 async def get_callback(request: Request, response: Response, code: Optional[str] = None, error_description: Optional[str] = None, callback_url: Optional[str] = None):
     app = request.app
-    if test_password_only_auth_enabled():
-        response.status_code = 403
-        return {"error": ml.tr(request, "no_access_to_resource")}
     if code is None and error_description is None or callback_url is None:
         response.status_code = 400
         return {"error": ml.tr(request, "invalid_params")}
@@ -26,6 +25,11 @@ async def get_callback(request: Request, response: Response, code: Optional[str]
     if code is None and error_description is not None:
         response.status_code = 400
         return {"error": error_description}
+
+    public_url = os.environ.get("HUB_PUBLIC_URL", f"https://{app.config.domain}").rstrip("/")
+    if callback_url != public_url + "/auth/discord/callback":
+        response.status_code = 400
+        return {"error": ml.tr(request, "invalid_params")}
 
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'GET /auth/discord/callback', 60, 60)
@@ -88,13 +92,29 @@ async def get_callback(request: Request, response: Response, code: Optional[str]
                     except:
                         pass
 
-                await app.db.execute(dhrid, f"INSERT INTO user(userid, name, email, avatar, bio, roles, discordid, steamid, truckersmpid, join_timestamp, mfa_secret, tracker_in_use) VALUES (-1, '{username}', {email}, '{avatar}', '', '', {discordid}, NULL, NULL, {int(time.time())}, '', 0)") # email should be pre-quoated
-                await app.db.execute(dhrid, "SELECT LAST_INSERT_ID();")
-                uid = (await app.db.fetchone(dhrid))[0]
-                await app.db.execute(dhrid, f"INSERT INTO settings VALUES ('{uid}', 'notification', ',drivershub,login,dlog,member,application,challenge,division,economy,event,')")
-                await app.db.commit(dhrid)
-                await AuditLog(request, uid, "auth", ml.ctr(request, "discord_register", var = {"country": getRequestCountry(request)}))
-                await GetUserInfo(request, uid = uid, nocache = True) # force update cache
+                try:
+                    await app.db.execute(dhrid, f"INSERT INTO user(userid, name, email, avatar, bio, roles, discordid, steamid, truckersmpid, join_timestamp, mfa_secret, tracker_in_use) VALUES (-1, '{username}', {email}, '{avatar}', '', '', {discordid}, NULL, NULL, {int(time.time())}, '', 0)") # email should be pre-quoated
+                except pymysql.err.IntegrityError as exc:
+                    if exc.args[0] != 1062:
+                        raise
+                    await app.db.execute(dhrid, f"SELECT uid, mfa_secret, email FROM user WHERE discordid = {discordid}")
+                    existing_user = await app.db.fetchall(dhrid)
+                    if len(existing_user) != 1:
+                        raise
+                    uid, mfa_secret, existing_email = existing_user[0]
+                    if existing_email is None or "@" not in existing_email or app.config.sync_discord_email:
+                        await app.db.execute(dhrid, f"UPDATE user SET email = {email} WHERE uid = {uid}")
+                        await app.db.commit(dhrid)
+                        await GetUserInfo(request, uid = uid, nocache = True)
+                    elif not app.config.sync_discord_email:
+                        email = "'" + convertQuotation(existing_email) + "'"
+                else:
+                    await app.db.execute(dhrid, "SELECT LAST_INSERT_ID();")
+                    uid = (await app.db.fetchone(dhrid))[0]
+                    await app.db.execute(dhrid, f"INSERT INTO settings VALUES ('{uid}', 'notification', ',drivershub,login,dlog,member,application,challenge,division,economy,event,')")
+                    await app.db.commit(dhrid)
+                    await AuditLog(request, uid, "auth", ml.ctr(request, "discord_register", var = {"country": getRequestCountry(request)}))
+                    await GetUserInfo(request, uid = uid, nocache = True) # force update cache
 
             else:
                 uid = t[0][0]
@@ -108,7 +128,7 @@ async def get_callback(request: Request, response: Response, code: Optional[str]
                 if t[0][2] is not None and "@" in t[0][2] and not app.config.sync_discord_email:
                     email = "'" + convertQuotation(t[0][2]) + "'"
 
-            if mfa_secret != "" and not test_password_only_auth_enabled():
+            if mfa_secret != "" and not test_security_bypass_enabled():
                 stoken = str(uuid.uuid4())
                 stoken = "f" + stoken[1:]
                 await app.db.execute(dhrid, f"INSERT INTO auth_ticket VALUES ('{stoken}', {uid}, {int(time.time())+600})") # 10min ticket

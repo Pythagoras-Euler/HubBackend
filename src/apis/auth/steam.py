@@ -1,24 +1,20 @@
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
+import os
 import time
 import uuid
 
+import pymysql
 from fastapi import Request, Response
 
 import multilang as ml
 from functions import *
+from functions.steam_openid import SteamOpenIDError, SteamOpenIDServiceError, verify_steam_openid
 
 
 async def get_callback(request: Request, response: Response):
     app = request.app
-    if test_password_only_auth_enabled():
-        response.status_code = 403
-        return {"error": ml.tr(request, "no_access_to_resource")}
-    data = str(request.query_params).replace("openid.mode=id_res", "openid.mode=check_authentication")
-    if data == "":
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_params")}
 
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'GET /auth/steam/callback', 60, 60)
@@ -29,20 +25,15 @@ async def get_callback(request: Request, response: Response):
 
     await app.db.new_conn(dhrid, db_name = app.config.db_name)
 
-    r = None
     try:
-        r = await arequests.get(app, "https://steamcommunity.com/openid/login?" + data, dhrid = dhrid)
-    except:
+        public_url = os.environ.get("HUB_PUBLIC_URL", f"https://{app.config.domain}")
+        steamid = await verify_steam_openid(app, request.query_params, public_url, dhrid)
+    except SteamOpenIDServiceError:
         response.status_code = 503
         return {"error": ml.tr(request, 'service_api_error', var = {'service': "Steam"})}
-    if r.status_code // 100 != 2:
-        response.status_code = 503
-        return {"error": ml.tr(request, 'service_api_error', var = {'service': "Steam"})}
-    if r.text.find("is_valid:true") == -1:
+    except SteamOpenIDError:
         response.status_code = 400
         return {"error": ml.tr(request, "invalid_steam_auth")}
-    steamid = data.split("openid.identity=")[1].split("&")[0]
-    steamid = int(steamid[steamid.rfind("%2F") + 3 :])
 
     await app.db.execute(dhrid, f"SELECT uid, discordid, name FROM user WHERE steamid = {steamid}")
     t = await app.db.fetchall(dhrid)
@@ -63,13 +54,23 @@ async def get_callback(request: Request, response: Response):
             except:
                 pass
 
-        # register user
-        await app.db.execute(dhrid, f"INSERT INTO user(userid, name, email, avatar, bio, roles, discordid, steamid, truckersmpid, join_timestamp, mfa_secret, tracker_in_use) VALUES (-1, '{username}', '', '{avatar}', '', '', NULL, {steamid}, NULL, {int(time.time())}, '', 0)")
-        await app.db.execute(dhrid, "SELECT LAST_INSERT_ID();")
-        uid = (await app.db.fetchone(dhrid))[0]
-        await app.db.execute(dhrid, f"INSERT INTO settings VALUES ('{uid}', 'notification', ',drivershub,login,dlog,member,application,challenge,division,economy,event,')")
-        await app.db.commit(dhrid)
-        await AuditLog(request, uid, "auth", ml.ctr(request, "steam_register", var = {"country": getRequestCountry(request)}))
+        try:
+            await app.db.execute(dhrid, f"INSERT INTO user(userid, name, email, avatar, bio, roles, discordid, steamid, truckersmpid, join_timestamp, mfa_secret, tracker_in_use) VALUES (-1, '{username}', '', '{avatar}', '', '', NULL, {steamid}, NULL, {int(time.time())}, '', 0)")
+        except pymysql.err.IntegrityError as exc:
+            if exc.args[0] != 1062:
+                raise
+            # A parallel callback registered the same Steam account first.
+            await app.db.execute(dhrid, f"SELECT uid, name FROM user WHERE steamid = {steamid}")
+            existing_user = await app.db.fetchall(dhrid)
+            if len(existing_user) != 1:
+                raise
+            uid, username = existing_user[0]
+        else:
+            await app.db.execute(dhrid, "SELECT LAST_INSERT_ID();")
+            uid = (await app.db.fetchone(dhrid))[0]
+            await app.db.execute(dhrid, f"INSERT INTO settings VALUES ('{uid}', 'notification', ',drivershub,login,dlog,member,application,challenge,division,economy,event,')")
+            await app.db.commit(dhrid)
+            await AuditLog(request, uid, "auth", ml.ctr(request, "steam_register", var = {"country": getRequestCountry(request)}))
     else:
         uid = t[0][0]
         username = t[0][2]
@@ -80,7 +81,7 @@ async def get_callback(request: Request, response: Response):
     await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     mfa_secret = t[0][0]
-    if mfa_secret != "" and not test_password_only_auth_enabled():
+    if mfa_secret != "" and not test_security_bypass_enabled():
         stoken = str(uuid.uuid4())
         stoken = "f" + stoken[1:]
         await app.db.execute(dhrid, f"INSERT INTO auth_ticket VALUES ('{stoken}', {uid}, {int(time.time())+600})") # 10min ticket

@@ -156,9 +156,6 @@ async def auth(authorization, request, allow_application_token = False, check_me
     authorization = f"{tokentype} {stoken}"
     authorization_key = f"{tokentype[0]}-{stoken.replace('-','')}" # for redis
 
-    if tokentype == "Application" and test_password_only_auth_enabled():
-        return {"error": ml.tr(request, "application_token_not_allowed"), "code": 401}
-
     if only_validate_token and app.redis.exists(f"auth:{authorization_key}"):
         return {"error": False}
     if only_use_cache and not app.redis.exists(f"auth:{authorization_key}"):
@@ -441,7 +438,7 @@ async def auth(authorization, request, allow_application_token = False, check_me
 async def isSecureAuth(authorization, request):
     (app, dhrid) = (request.app, request.state.dhrid)
     stoken = authorization.split(" ")[1]
-    if not stoken.startswith("e") or test_password_only_auth_enabled():
+    if not stoken.startswith("e") or test_security_bypass_enabled():
         return True
 
     au = await auth(authorization, request, check_member=False)

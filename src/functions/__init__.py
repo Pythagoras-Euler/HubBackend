@@ -10,6 +10,7 @@ from functions.mail import *
 from functions.notification import *
 from functions.ranking import *
 from functions.security import *
+from functions.steam_openid import *
 from functions.totp import *
 from functions.tracker import *
 from functions.userinfo import *

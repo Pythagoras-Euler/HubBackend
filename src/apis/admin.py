@@ -352,7 +352,7 @@ async def post_config_reload(request: Request, response: Response, authorization
         del au["code"]
         return au
 
-    if not test_password_only_auth_enabled():
+    if not test_security_bypass_enabled():
         await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
         t = await app.db.fetchall(dhrid)
         mfa_secret = t[0][0]
@@ -419,7 +419,7 @@ async def post_restart(request: Request, response: Response, authorization: str 
         del au["code"]
         return au
 
-    if not test_password_only_auth_enabled():
+    if not test_security_bypass_enabled():
         await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
         t = await app.db.fetchall(dhrid)
         mfa_secret = t[0][0]

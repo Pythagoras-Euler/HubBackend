@@ -1,6 +1,7 @@
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
+import os
 import traceback
 from typing import Optional
 
@@ -10,6 +11,7 @@ import multilang as ml
 from api import tracebackHandler
 from functions import *
 from functions.discord import DiscordAuth
+from functions.steam_openid import SteamOpenIDError, SteamOpenIDServiceError, verify_steam_openid
 
 
 async def post_resend_confirmation(request: Request, response: Response, authorization: str = Header(None)):
@@ -131,6 +133,11 @@ async def patch_discord(request: Request, response: Response, authorization: str
         response.status_code = 400
         return {"error": error_description}
 
+    public_url = os.environ.get("HUB_PUBLIC_URL", f"https://{app.config.domain}").rstrip("/")
+    if callback_url != public_url + "/auth/discord/callback":
+        response.status_code = 400
+        return {"error": ml.tr(request, "invalid_params")}
+
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'PATCH /user/discord', 60, 3)
     if rl[0]:
@@ -240,10 +247,6 @@ async def patch_steam(request: Request, response: Response, authorization: str =
 
     JSON: `{"callback": str}`"""
     app = request.app
-    data = str(request.query_params).replace("openid.mode=id_res", "openid.mode=check_authentication")
-    if data == "":
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_params")}
 
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'PATCH /user/steam', 60, 3)
@@ -261,20 +264,15 @@ async def patch_steam(request: Request, response: Response, authorization: str =
         return au
     uid = au["uid"]
 
-    r = None
     try:
-        r = await arequests.get(app, "https://steamcommunity.com/openid/login?" + data, dhrid = dhrid)
-    except:
+        public_url = os.environ.get("HUB_PUBLIC_URL", f"https://{app.config.domain}")
+        steamid = await verify_steam_openid(app, request.query_params, public_url, dhrid)
+    except SteamOpenIDServiceError:
         response.status_code = 503
         return {"error": ml.tr(request, 'service_api_error', var = {'service': "Steam"}, force_lang = au["language"])}
-    if r.status_code // 100 != 2:
-        response.status_code = 503
-        return {"error": ml.tr(request, 'service_api_error', var = {'service': "Steam"}, force_lang = au["language"])}
-    if r.text.find("is_valid:true") == -1:
+    except SteamOpenIDError:
         response.status_code = 400
         return {"error": ml.tr(request, "invalid_steam_auth", force_lang = au["language"])}
-    steamid = data.split("openid.identity=")[1].split("&")[0]
-    steamid = int(steamid[steamid.rfind("%2F") + 3 :])
 
     await app.db.execute(dhrid, f"SELECT * FROM user WHERE uid != '{uid}' AND steamid = {steamid}")
     t = await app.db.fetchall(dhrid)
@@ -289,7 +287,7 @@ async def patch_steam(request: Request, response: Response, authorization: str =
     if orgsteamid is not None and userid >= 0:
         if not (await auth(authorization, request, required_permission = ["driver"]))["error"]:
             try:
-                await remove_driver(request, steamid, au["uid"], au["userid"], au["name"])
+                await remove_driver(request, orgsteamid, au["uid"], au["userid"], au["name"])
                 await add_driver(request, steamid, au["uid"], au["userid"], au["name"])
             except:
                 pass
