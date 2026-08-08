@@ -2,6 +2,7 @@
 # Author: @CharlesWithC
 
 import copy
+import hashlib
 import json
 import math
 import os
@@ -28,6 +29,24 @@ class Dict2Obj(object):
                 setattr(self, key, data)
             else:
                 setattr(self, key, d[key])
+
+
+PROTECTED_CONFIG_STATUS_KEYS = ["discord_client_secret", "discord_bot_token", "steam_api_key"]
+
+
+def get_protected_config_status(config):
+    status = {}
+    for key in PROTECTED_CONFIG_STATUS_KEYS:
+        value = config.get(key, "")
+        if value is None:
+            value = ""
+        value = str(value).strip()
+        configured = value != ""
+        status[key] = {
+            "configured": configured,
+            "fingerprint": hashlib.sha256(value.encode("utf-8")).hexdigest()[:8].upper() if configured else "",
+        }
+    return status
 
 async def post_discord_role_connection_enable(request: Request, response: Response, authorization: str = Header(None)):
     """Enable Discord Role Connection"""
@@ -123,6 +142,7 @@ async def get_config(request: Request, response: Response, authorization: str = 
 
     # current config
     last_modified = 0
+    protected_config = {}
     try:
         if os.path.exists(app.config_path + ".saved"):
             orgcfg = validateConfig(json.loads(open(app.config_path + ".saved", "r", encoding="utf-8").read()))
@@ -132,6 +152,7 @@ async def get_config(request: Request, response: Response, authorization: str = 
             last_modified = os.path.getmtime(app.config_path)
         f = copy.deepcopy(orgcfg)
         ffconfig = {}
+        protected_config = get_protected_config_status(orgcfg)
 
         # process whitelist
         for tt in f.keys():
@@ -155,6 +176,7 @@ async def get_config(request: Request, response: Response, authorization: str = 
     # old config
     t = copy.deepcopy(app.backup_config)
     ttconfig = {}
+    backup_protected_config = get_protected_config_status(t)
 
     # process whitelist
     for tt in t.keys():
@@ -172,7 +194,7 @@ async def get_config(request: Request, response: Response, authorization: str = 
                 if tt in ffconfig.keys():
                     del ttconfig[tt]
 
-    return {"config": ffconfig, "backup": ttconfig, "config_last_modified": int(last_modified), "backup_last_modified": int(app.config_last_modified)}
+    return {"config": ffconfig, "backup": ttconfig, "protected_config": protected_config, "backup_protected_config": backup_protected_config, "config_last_modified": int(last_modified), "backup_last_modified": int(app.config_last_modified)}
 
 def restart(app):
     time.sleep(3)
