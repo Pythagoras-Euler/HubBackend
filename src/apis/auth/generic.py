@@ -12,6 +12,17 @@ import multilang as ml
 from functions import *
 
 
+def should_verify_captcha(app):
+    """Return whether this request should be verified by the CAPTCHA provider."""
+    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() == "true":
+        return False
+    # The frontend cannot create a valid token without a configured hCaptcha
+    # site key.  Do not reject test/local logins in that incomplete state.
+    if app.config.captcha.provider == "hcaptcha" and not os.environ.get("HCAPTCHA_SITEKEY", "").strip():
+        return False
+    return True
+
+
 async def post_password(request: Request, response: Response):
     app = request.app
     dhrid = request.state.dhrid
@@ -33,7 +44,7 @@ async def post_password(request: Request, response: Response):
         return {"error": ml.tr(request, "bad_json")}
 
     # Test-only bypass. It must remain false on every public production deployment.
-    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+    if should_verify_captcha(app):
         try:
             if app.config.captcha.provider == "cloudflare":
                 r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
@@ -145,7 +156,7 @@ async def post_register(request: Request, response: Response):
         return {"error": ml.tr(request, "bad_json")}
 
     # Test-only bypass. It must remain false on every public production deployment.
-    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+    if should_verify_captcha(app):
         try:
             if app.config.captcha.provider == "cloudflare":
                 r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
@@ -278,7 +289,7 @@ async def post_reset(request: Request, response: Response):
         return {"error": ml.tr(request, "bad_json")}
 
     # Test-only bypass. It must remain false on every public production deployment.
-    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+    if should_verify_captcha(app):
         try:
             if app.config.captcha.provider == "cloudflare":
                 r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
