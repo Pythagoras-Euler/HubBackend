@@ -109,6 +109,7 @@ routes_economy = [
 
 routes_event = [
     APIRoute("/events/list", event.get_list, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/events/truckersmp/sync", event.post_truckersmp_sync, methods=["POST"], response_class=JSONResponse),
     APIRoute("/events/{eventid}", event.get_event, methods=["GET"], response_class=JSONResponse),
     APIRoute("/events/{eventid}/vote", event.put_vote, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/events/{eventid}/vote", event.delete_vote, methods=["DELETE"], response_class=JSONResponse),
