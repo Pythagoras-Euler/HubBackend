@@ -2,8 +2,10 @@
 # Author: @CharlesWithC
 
 import asyncio
+import json
 import math
 import os
+import re
 import time
 import traceback
 from datetime import datetime, timezone
@@ -14,6 +16,186 @@ from fastapi import Header, Request, Response
 import multilang as ml
 from api import tracebackHandler
 from functions import *
+
+
+TRUCKERSMP_API_URL = "https://api.truckersmp.com/v2"
+TRUCKERSMP_EVENT_LINK_RE = re.compile(r"^https?://(?:www\.)?truckersmp\.com/events/(\d+)(?:[-/].*)?$", re.IGNORECASE)
+
+
+def _truckersmp_event_id(link):
+    if not isinstance(link, str):
+        return None
+    match = TRUCKERSMP_EVENT_LINK_RE.match(link.strip())
+    return int(match.group(1)) if match is not None else None
+
+
+def _truckersmp_timestamp(value):
+    if not isinstance(value, str) or value.strip() == "":
+        raise ValueError("Missing TruckersMP event timestamp")
+
+    value = value.strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def _truckersmp_location(value):
+    if not isinstance(value, dict):
+        return ""
+
+    city = str(value.get("city") or "").strip()
+    location = str(value.get("location") or "").strip()
+    if city and location:
+        return f"{city} ({location})"[:200]
+    return (city or location)[:200]
+
+
+def _normalize_truckersmp_event(event):
+    truckersmp_eventid = int(event["id"])
+    if truckersmp_eventid <= 0:
+        raise ValueError("Invalid TruckersMP event ID")
+
+    title = str(event.get("name") or "").strip()
+    if title == "":
+        raise ValueError("Missing TruckersMP event title")
+
+    link = str(event.get("url") or "").strip()
+    if _truckersmp_event_id(link) != truckersmp_eventid:
+        link = f"https://truckersmp.com/events/{truckersmp_eventid}"
+
+    description = str(event.get("description") or "").strip()
+    banner = str(event.get("banner") or "").strip()
+    if banner.startswith("https://static.truckersmp.com/") and '"' not in banner:
+        description = f'[Image src="{banner}"]\n\n{description}'.rstrip()
+
+    start_at = event.get("start_at")
+    meetup_at = event.get("meetup_at") or start_at
+
+    return {
+        "truckersmp_eventid": truckersmp_eventid,
+        "title": title[:200],
+        "description": description[:2000],
+        "link": link[:1000],
+        "departure": _truckersmp_location(event.get("departure")),
+        "destination": _truckersmp_location(event.get("arrive")),
+        "meetup_timestamp": _truckersmp_timestamp(meetup_at),
+        "departure_timestamp": _truckersmp_timestamp(start_at),
+    }
+
+
+async def post_truckersmp_sync(request: Request, response: Response, authorization: str = Header(None)):
+    app = request.app
+    dhrid = request.state.dhrid
+    rl = await ratelimit(request, 'POST /events/truckersmp/sync', 60, 5)
+    if rl[0]:
+        return rl[1]
+    for k in rl[1].keys():
+        response.headers[k] = rl[1][k]
+
+    await app.db.new_conn(dhrid, db_name = app.config.db_name)
+
+    au = await auth(authorization, request, allow_application_token = True, required_permission = ["administrator", "manage_events"])
+    if au["error"]:
+        response.status_code = au["code"]
+        del au["code"]
+        return au
+
+    await app.db.execute(dhrid, "SELECT sval FROM settings WHERE skey = 'client-config/meta'")
+    config_rows = await app.db.fetchall(dhrid)
+    try:
+        vtc_id = int(json.loads(config_rows[0][0]).get("truckersmp_vtc_id", 0))
+        if vtc_id <= 0:
+            raise ValueError
+    except (IndexError, TypeError, ValueError, json.JSONDecodeError):
+        response.status_code = 400
+        return {"error": "TruckersMP VTC ID is not configured."}
+
+    remote_events = {}
+    for path in [f"/vtc/{vtc_id}/events", f"/vtc/{vtc_id}/events/attending"]:
+        try:
+            remote_response = await arequests.get(app, f"{TRUCKERSMP_API_URL}{path}", timeout = 15, dhrid = dhrid)
+            remote_data = remote_response.json()
+            events = remote_data.get("response")
+            if remote_response.status_code != 200 or remote_data.get("error") or not isinstance(events, list):
+                raise ValueError
+        except Exception:
+            response.status_code = 502
+            return {"error": "Unable to fetch events from TruckersMP."}
+
+        for event in events:
+            try:
+                remote_events[int(event["id"])] = event
+            except (KeyError, TypeError, ValueError):
+                continue
+
+    await app.db.execute(dhrid, "SELECT eventid, title, description, link, departure, destination, distance, meetup_timestamp, departure_timestamp FROM event WHERE eventid >= 0")
+    local_rows = await app.db.fetchall(dhrid)
+    local_events = {}
+    for row in local_rows:
+        try:
+            truckersmp_eventid = _truckersmp_event_id(decompress(row[3]))
+        except Exception:
+            truckersmp_eventid = None
+        if truckersmp_eventid is not None and truckersmp_eventid not in local_events:
+            local_events[truckersmp_eventid] = row
+
+    created = 0
+    updated = 0
+    unchanged = 0
+    skipped = 0
+    for remote_event in remote_events.values():
+        try:
+            event = _normalize_truckersmp_event(remote_event)
+        except (KeyError, TypeError, ValueError):
+            skipped += 1
+            continue
+
+        local_event = local_events.get(event["truckersmp_eventid"])
+        if local_event is None:
+            await app.db.execute(dhrid, f"INSERT INTO event(userid, title, description, link, departure, destination, distance, meetup_timestamp, departure_timestamp, is_private, orderid, is_pinned, timestamp, vote, attendee, points) VALUES ({au['userid']}, '{convertQuotation(event['title'])}', '{convertQuotation(compress(event['description']))}', '{convertQuotation(compress(event['link']))}', '{convertQuotation(event['departure'])}', '{convertQuotation(event['destination'])}', '', {event['meetup_timestamp']}, {event['departure_timestamp']}, 0, 0, 0, {int(time.time())}, '', '', 0)")
+            created += 1
+            continue
+
+        current_values = (
+            local_event[1],
+            decompress(local_event[2]),
+            decompress(local_event[3]),
+            local_event[4],
+            local_event[5],
+            local_event[7],
+            local_event[8],
+        )
+        remote_values = (
+            event["title"],
+            event["description"],
+            event["link"],
+            event["departure"],
+            event["destination"],
+            event["meetup_timestamp"],
+            event["departure_timestamp"],
+        )
+        if current_values == remote_values:
+            unchanged += 1
+            continue
+
+        await app.db.execute(dhrid, f"UPDATE event SET title = '{convertQuotation(event['title'])}', description = '{convertQuotation(compress(event['description']))}', link = '{convertQuotation(compress(event['link']))}', departure = '{convertQuotation(event['departure'])}', destination = '{convertQuotation(event['destination'])}', meetup_timestamp = {event['meetup_timestamp']}, departure_timestamp = {event['departure_timestamp']} WHERE eventid = {local_event[0]}")
+        updated += 1
+
+    await app.db.commit(dhrid)
+
+    if created or updated:
+        await AuditLog(request, au["uid"], "event", f"Synchronized TruckersMP VTC {vtc_id} events: {created} created, {updated} updated")
+        await app.db.commit(dhrid)
+
+    return {
+        "vtc_id": vtc_id,
+        "source_count": len(remote_events),
+        "created": created,
+        "updated": updated,
+        "unchanged": unchanged,
+        "skipped": skipped,
+    }
 
 
 async def EventNotification(app):
