@@ -16,6 +16,9 @@ from functions.discord import DiscordAuth
 
 async def get_callback(request: Request, response: Response, code: Optional[str] = None, error_description: Optional[str] = None, callback_url: Optional[str] = None):
     app = request.app
+    if test_password_only_auth_enabled():
+        response.status_code = 403
+        return {"error": ml.tr(request, "no_access_to_resource")}
     if code is None and error_description is None or callback_url is None:
         response.status_code = 400
         return {"error": ml.tr(request, "invalid_params")}
@@ -105,7 +108,7 @@ async def get_callback(request: Request, response: Response, code: Optional[str]
                 if t[0][2] is not None and "@" in t[0][2] and not app.config.sync_discord_email:
                     email = "'" + convertQuotation(t[0][2]) + "'"
 
-            if mfa_secret != "":
+            if mfa_secret != "" and not test_password_only_auth_enabled():
                 stoken = str(uuid.uuid4())
                 stoken = "f" + stoken[1:]
                 await app.db.execute(dhrid, f"INSERT INTO auth_ticket VALUES ('{stoken}', {uid}, {int(time.time())+600})") # 10min ticket

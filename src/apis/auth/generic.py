@@ -14,7 +14,7 @@ from functions import *
 
 def should_verify_captcha(app):
     """Return whether this request should be verified by the CAPTCHA provider."""
-    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() == "true":
+    if test_password_only_auth_enabled() or os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() == "true":
         return False
     # The frontend cannot create a valid token without a configured hCaptcha
     # site key.  Do not reject test/local logins in that incomplete state.
@@ -77,7 +77,7 @@ async def post_password(request: Request, response: Response):
     t = await app.db.fetchall(dhrid)
     username = t[0][0]
     mfa_secret = t[0][1]
-    if mfa_secret != "":
+    if mfa_secret != "" and not test_password_only_auth_enabled():
         stoken = str(uuid.uuid4())
         stoken = "f" + stoken[1:]
         await app.db.execute(dhrid, f"INSERT INTO auth_ticket VALUES ('{stoken}', {uid}, {int(time.time())+600})") # 10min ticket
@@ -339,6 +339,9 @@ async def post_reset(request: Request, response: Response):
 
 async def post_mfa(request: Request, response: Response):
     app = request.app
+    if test_password_only_auth_enabled():
+        response.status_code = 403
+        return {"error": ml.tr(request, "no_access_to_resource")}
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'POST /auth/mfa', 60, 3)
     if rl[0]:

@@ -271,6 +271,9 @@ async def get_application_list(request: Request, response: Response, authorizati
 
 async def post_application(request: Request, response: Response, authorization: str = Header(None)):
     app = request.app
+    if test_password_only_auth_enabled():
+        response.status_code = 403
+        return {"error": ml.tr(request, "no_access_to_resource")}
     dhrid = request.state.dhrid
     rl = await ratelimit(request, 'POST /token/application', 120, 10)
     if rl[0]:
@@ -296,7 +299,7 @@ async def post_application(request: Request, response: Response, authorization: 
     await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     mfa_secret = t[0][0]
-    if mfa_secret != "":
+    if mfa_secret != "" and not test_password_only_auth_enabled():
         try:
             otp = data["otp"]
         except:

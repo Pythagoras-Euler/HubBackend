@@ -330,22 +330,23 @@ async def post_config_reload(request: Request, response: Response, authorization
         del au["code"]
         return au
 
-    await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
-    t = await app.db.fetchall(dhrid)
-    mfa_secret = t[0][0]
-    if mfa_secret == "":
-        response.status_code = 428
-        return {"error": ml.tr(request, "mfa_required", force_lang = au["language"])}
+    if not test_password_only_auth_enabled():
+        await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
+        t = await app.db.fetchall(dhrid)
+        mfa_secret = t[0][0]
+        if mfa_secret == "":
+            response.status_code = 428
+            return {"error": ml.tr(request, "mfa_required", force_lang = au["language"])}
 
-    data = await request.json()
-    try:
-        otp = data["otp"]
-    except:
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
-    if not valid_totp(otp, mfa_secret):
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
+        data = await request.json()
+        try:
+            otp = data["otp"]
+        except:
+            response.status_code = 400
+            return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
+        if not valid_totp(otp, mfa_secret):
+            response.status_code = 400
+            return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
 
     await AuditLog(request, au["uid"], "system", ml.ctr(request, "reloaded_config"))
 
@@ -396,22 +397,23 @@ async def post_restart(request: Request, response: Response, authorization: str 
         del au["code"]
         return au
 
-    await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
-    t = await app.db.fetchall(dhrid)
-    mfa_secret = t[0][0]
-    if mfa_secret == "":
-        response.status_code = 428
-        return {"error": ml.tr(request, "mfa_required", force_lang = au["language"])}
+    if not test_password_only_auth_enabled():
+        await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE userid = {au['userid']}")
+        t = await app.db.fetchall(dhrid)
+        mfa_secret = t[0][0]
+        if mfa_secret == "":
+            response.status_code = 428
+            return {"error": ml.tr(request, "mfa_required", force_lang = au["language"])}
 
-    data = await request.json()
-    try:
-        otp = data["otp"]
-    except:
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
-    if not valid_totp(otp, mfa_secret):
-        response.status_code = 400
-        return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
+        data = await request.json()
+        try:
+            otp = data["otp"]
+        except:
+            response.status_code = 400
+            return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
+        if not valid_totp(otp, mfa_secret):
+            response.status_code = 400
+            return {"error": ml.tr(request, "invalid_otp", force_lang = au["language"])}
 
     if os.path.exists(app.config_path + ".saved"):
         config_txt = open(app.config_path + ".saved", "r", encoding="utf-8").read()

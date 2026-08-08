@@ -12,6 +12,9 @@ from functions import *
 
 async def get_callback(request: Request, response: Response):
     app = request.app
+    if test_password_only_auth_enabled():
+        response.status_code = 403
+        return {"error": ml.tr(request, "no_access_to_resource")}
     data = str(request.query_params).replace("openid.mode=id_res", "openid.mode=check_authentication")
     if data == "":
         response.status_code = 400
@@ -77,7 +80,7 @@ async def get_callback(request: Request, response: Response):
     await app.db.execute(dhrid, f"SELECT mfa_secret FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     mfa_secret = t[0][0]
-    if mfa_secret != "":
+    if mfa_secret != "" and not test_password_only_auth_enabled():
         stoken = str(uuid.uuid4())
         stoken = "f" + stoken[1:]
         await app.db.execute(dhrid, f"INSERT INTO auth_ticket VALUES ('{stoken}', {uid}, {int(time.time())+600})") # 10min ticket

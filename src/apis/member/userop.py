@@ -513,7 +513,7 @@ async def post_resign(request: Request, response: Response, authorization: str =
     mfa_secret = t[0][0]
     steamid = t[0][1]
     avatar = t[0][2]
-    if mfa_secret != "":
+    if mfa_secret != "" and not test_password_only_auth_enabled():
         data = await request.json()
         try:
             otp = data["otp"]

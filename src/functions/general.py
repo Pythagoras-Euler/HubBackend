@@ -29,6 +29,10 @@ class Dict2Obj(object):
 class RateLimitException(Exception):
     pass
 
+def test_password_only_auth_enabled():
+    """Return whether the explicit test-only authentication bypass is enabled."""
+    return os.environ.get("HUB_TEST_PASSWORD_ONLY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on"}
+
 def restart(app):
     time.sleep(3)
     os.system(f"nohup ./launcher hub restart {app.config.abbr} > /dev/null")
