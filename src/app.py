@@ -258,8 +258,7 @@ def createApp(config_path, multi_mode = False, first_init = False, args = {}, ma
             states = res[2]
             middlewares = res[3]
         except Exception as exc:
-            if first_init:
-                logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
+            logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
             continue
 
         # test routes and state
@@ -281,8 +280,7 @@ def createApp(config_path, multi_mode = False, first_init = False, args = {}, ma
                             if callable(mdw):
                                 test_app.external_middleware[middleware_type].append(mdw)
         except Exception as exc:
-            if first_init:
-                logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
+            logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
             continue
 
         # load routes and state
@@ -303,8 +301,7 @@ def createApp(config_path, multi_mode = False, first_init = False, args = {}, ma
                             if callable(mdw):
                                 app.external_middleware[middleware_type].append(mdw)
         except Exception as exc:
-            if first_init:
-                logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
+            logger.error(f"[{app.config.abbr}] [External Plugin] Error loading '{plugin_name}': {exc}")
             continue
 
         app.loaded_external_plugins.append(plugin_name)

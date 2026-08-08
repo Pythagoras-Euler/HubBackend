@@ -283,7 +283,9 @@ def init(config: dict, print_log: bool = False):
         if len(t) == 0:
             cur.execute(f"INSERT INTO ext_assets VALUES ('client-config/{k}', '')")
 
-    cur.execute("SELECT * FROM settings WHERE skey='client-config/meta'")
+    # Only fetch the serialized value.  SELECT * returns uid as column 0,
+    # which is NULL for the global setting and breaks JSON parsing on restart.
+    cur.execute("SELECT sval FROM settings WHERE skey='client-config/meta'")
     t = cur.fetchall()
     public_url = os.environ.get("HUB_PUBLIC_URL", config["domain"]).rstrip("/")
     if len(t) == 0:
