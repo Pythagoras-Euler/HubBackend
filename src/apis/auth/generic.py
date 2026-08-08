@@ -1,6 +1,7 @@
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
+import os
 import time
 import uuid
 
@@ -31,18 +32,20 @@ async def post_password(request: Request, response: Response):
         response.status_code = 400
         return {"error": ml.tr(request, "bad_json")}
 
-    try:
-        if app.config.captcha.provider == "cloudflare":
-            r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        elif app.config.captcha.provider == "hcaptcha":
-            r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        d = r.json()
-        if not d["success"]:
-            response.status_code = 403
-            return {"error": ml.tr(request, "invalid_captcha")}
-    except:
-        response.status_code = 503
-        return {"error": ml.tr(request, "captcha_api_inaccessible")}
+    # Test-only bypass. It must remain false on every public production deployment.
+    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+        try:
+            if app.config.captcha.provider == "cloudflare":
+                r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            elif app.config.captcha.provider == "hcaptcha":
+                r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            d = r.json()
+            if not d["success"]:
+                response.status_code = 403
+                return {"error": ml.tr(request, "invalid_captcha")}
+        except:
+            response.status_code = 503
+            return {"error": ml.tr(request, "captcha_api_inaccessible")}
 
     await app.db.execute(dhrid, f"SELECT uid, password FROM user_password WHERE email = '{email}'")
     t = await app.db.fetchall(dhrid)
@@ -141,18 +144,20 @@ async def post_register(request: Request, response: Response):
         response.status_code = 400
         return {"error": ml.tr(request, "bad_json")}
 
-    try:
-        if app.config.captcha.provider == "cloudflare":
-            r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        elif app.config.captcha.provider == "hcaptcha":
-            r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        d = r.json()
-        if not d["success"]:
-            response.status_code = 403
-            return {"error": ml.tr(request, "invalid_captcha")}
-    except:
-        response.status_code = 503
-        return {"error": ml.tr(request, "captcha_api_inaccessible")}
+    # Test-only bypass. It must remain false on every public production deployment.
+    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+        try:
+            if app.config.captcha.provider == "cloudflare":
+                r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            elif app.config.captcha.provider == "hcaptcha":
+                r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            d = r.json()
+            if not d["success"]:
+                response.status_code = 403
+                return {"error": ml.tr(request, "invalid_captcha")}
+        except:
+            response.status_code = 503
+            return {"error": ml.tr(request, "captcha_api_inaccessible")}
 
     if len(password) >= 8:
         if bool(re.match('((?=.*\\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,30})', password)) is not True and \
@@ -272,18 +277,20 @@ async def post_reset(request: Request, response: Response):
         response.status_code = 400
         return {"error": ml.tr(request, "bad_json")}
 
-    try:
-        if app.config.captcha.provider == "cloudflare":
-            r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        elif app.config.captcha.provider == "hcaptcha":
-            r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
-        d = r.json()
-        if not d["success"]:
-            response.status_code = 403
-            return {"error": ml.tr(request, "invalid_captcha")}
-    except:
-        response.status_code = 503
-        return {"error": ml.tr(request, "captcha_api_inaccessible")}
+    # Test-only bypass. It must remain false on every public production deployment.
+    if os.environ.get("HUB_TEST_DISABLE_CAPTCHA", "false").lower() != "true":
+        try:
+            if app.config.captcha.provider == "cloudflare":
+                r = await arequests.post(app, "https://challenges.cloudflare.com/turnstile/v0/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            elif app.config.captcha.provider == "hcaptcha":
+                r = await arequests.post(app, "https://hcaptcha.com/siteverify", data = {"secret": app.config.captcha.secret, "response": captcha_response, "remoteip": request.client.host}, dhrid = dhrid)
+            d = r.json()
+            if not d["success"]:
+                response.status_code = 403
+                return {"error": ml.tr(request, "invalid_captcha")}
+        except:
+            response.status_code = 503
+            return {"error": ml.tr(request, "captcha_api_inaccessible")}
 
     if not emailConfigured(app):
         response.status_code = 428
