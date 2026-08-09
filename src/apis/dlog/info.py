@@ -119,7 +119,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
     if game == 1 or game == 2:
         gamelimit = f" AND dlog.unit = {game}"
 
-    await app.db.execute(dhrid, f"SELECT dlog.userid, dlog_meta.note, dlog.timestamp, dlog.logid, dlog.profit, dlog.unit, dlog.distance, dlog.isdelivered, division.divisionid, division.status, dlog.topspeed, dlog.fuel, dlog.view_count, dlog_meta.source_city, dlog_meta.source_company, dlog_meta.destination_city, dlog_meta.destination_company, dlog_meta.cargo_name, dlog_meta.cargo_mass FROM dlog \
+    await app.db.execute(dhrid, f"SELECT dlog.userid, dlog_meta.note, dlog.timestamp, dlog.logid, dlog.profit, dlog.unit, dlog.distance, dlog.isdelivered, division.divisionid, division.status, dlog.topspeed, dlog.fuel, dlog.view_count, dlog_meta.source_city, dlog_meta.source_company, dlog_meta.destination_city, dlog_meta.destination_company, dlog_meta.cargo_name, dlog_meta.cargo_mass, dlog.data FROM dlog \
         LEFT JOIN division ON dlog.logid = division.logid \
         LEFT JOIN dlog_meta ON dlog.logid = dlog_meta.logid \
         WHERE {'dlog.logid >= 0' if not manual else 'dlog.logid < 0'} {limit} {timelimit} {speed_limit} {gamelimit} {status_limit} ORDER BY dlog.{order_by} {order}, dlog.logid DESC LIMIT {max(page-1, 0) * page_size}, {page_size}")
@@ -190,9 +190,15 @@ async def get_list(request: Request, response: Response, authorization: str = He
         profit = tt[4]
         unit = tt[5]
 
-        userinfo = await GetUserInfo(request, userid = tt[0])
         if userid == -1 and app.config.privacy:
             userinfo = await GetUserInfo(request, privacy = True)
+        elif tt[0] == -1:
+            try:
+                userinfo = get_external_driver_info(json.loads(decompress(tt[19])))
+            except Exception:
+                userinfo = await GetUserInfo(request, userid = -1)
+        else:
+            userinfo = await GetUserInfo(request, userid = tt[0])
 
         status = 1
         if tt[7] == 0:
@@ -249,6 +255,7 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
     data = {}
     if t[0][1] != "":
         data = json.loads(decompress(t[0][1]))
+    external_userinfo = get_external_driver_info(data) if t[0][0] == -1 else None
     if "data" in data.keys():
         del data["data"]["object"]["driver"]
     distance = t[0][3]
@@ -323,6 +330,8 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
     userinfo = None
     if userid == -1 and app.config.privacy:
         userinfo = await GetUserInfo(request, privacy = True)
+    elif external_userinfo is not None:
+        userinfo = external_userinfo
     else:
         userinfo = await GetUserInfo(request, userid = t[0][0], tell_deleted = True)
         if "is_deleted" in userinfo:

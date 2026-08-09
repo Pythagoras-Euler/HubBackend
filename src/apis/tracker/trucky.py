@@ -393,7 +393,7 @@ async def post_import(response: Response, request: Request, jobid: int, authoriz
         response.status_code = 400
         return {"error": "Only job_completed and job_canceled events are accepted."}
 
-    result = await handle_new_job(request, original_data, converted_data, "trucky", bypass_tracker_check = bypass_tracker_check)
+    result = await handle_new_job(request, original_data, converted_data, "trucky", bypass_tracker_check = bypass_tracker_check, allow_external_driver = True)
     if len(result) == 2:
         response.status_code = result[0]
         return {"error": result[1]}

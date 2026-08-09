@@ -710,7 +710,42 @@ async def process_economy(request, userid, logid, data, driven_distance, revenue
         await tracebackHandler(request, exc, traceback.format_exc())
 
 TRACKER_MAP = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5}
-async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False):
+def get_external_driver_info(converted_data):
+    """Build the public driver card for a delivery with no Hub account.
+
+    Imported tracker deliveries can belong to a driver who has not registered
+    with Drivers Hub.  Keep that delivery attributable without creating an
+    account or treating the driver as a member.
+    """
+    driver = {}
+    try:
+        driver = converted_data["data"]["object"]["driver"]
+    except (KeyError, TypeError):
+        pass
+
+    steamid = driver.get("steam_id")
+    return {
+        "uid": None,
+        "userid": None,
+        "name": driver.get("username") or "Unknown",
+        "email": None,
+        "discordid": None,
+        "steamid": str(steamid) if steamid is not None else None,
+        "truckersmpid": None,
+        "tracker": "trucky",
+        "avatar": driver.get("profile_photo_url"),
+        "bio": None,
+        "note": "",
+        "global_note": None,
+        "roles": [],
+        "activity": None,
+        "mfa": None,
+        "join_timestamp": None,
+        "is_external": True,
+    }
+
+
+async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False, allow_external_driver = False):
     (app, dhrid) = (request.app, request.state.dhrid)
     await app.db.extend_conn(dhrid, 10)
     data = converted_data["data"]["object"]
@@ -720,17 +755,26 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
     steamid = int(data["driver"]["steam_id"])
     await app.db.execute(dhrid, f"SELECT userid, name, uid, discordid, tracker_in_use, roles FROM user WHERE steamid = {steamid}")
     t = await app.db.fetchall(dhrid)
-    if len(t) == 0:
-        return (404, "User not found.")
-    if t[0][0] == -1 or not checkPerm(app, str2list(t[0][5]), "driver"):
-        return (404, "User not driver.")
-    userid = t[0][0]
-    username = t[0][1]
-    uid = t[0][2]
-    discordid = t[0][3]
-    tracker_in_use = t[0][4]
+    external_driver = False
+    if len(t) == 0 or t[0][0] == -1 or not checkPerm(app, str2list(t[0][5]), "driver"):
+        if not allow_external_driver:
+            if len(t) == 0:
+                return (404, "User not found.")
+            return (404, "User not driver.")
+        external_driver = True
+        userid = -1
+        username = data["driver"].get("username") or "Unknown"
+        uid = None
+        discordid = None
+        tracker_in_use = tracker_type
+    else:
+        userid = t[0][0]
+        username = t[0][1]
+        uid = t[0][2]
+        discordid = t[0][3]
+        tracker_in_use = t[0][4]
     logid_tracker = data["id"] # logid in tracker platform
-    if tracker_in_use != tracker_type and not bypass_tracker_check:
+    if not external_driver and tracker_in_use != tracker_type and not bypass_tracker_check:
         return (403, "User has chosen to use another tracker.")
 
     duplicate = False # NOTE only for debugging purpose
@@ -826,7 +870,7 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
                     delivery_rule_value = ",".join(delivery_rules["required_realistic_settings"])
                     break
 
-    if not delivery_rule_ok:
+    if not external_driver and not delivery_rule_ok:
         await AuditLog(request, uid, "dlog", ml.ctr(request, "delivery_blocked_due_to_rules", var = {"tracker": TRACKER['trucky'], "trackerid": logid_tracker, "rule_key": delivery_rule_key, "rule_value": delivery_rule_value}))
         await notification(request, "dlog", uid, ml.tr(request, "delivery_blocked_due_to_rules", var = {"tracker": TRACKER['trucky'], "trackerid": logid_tracker, "rule_key": delivery_rule_key, "rule_value": delivery_rule_value}, force_lang = await GetUserLanguage(request, uid)))
         return (403, "Blocked due to delivery rules.")
@@ -864,41 +908,42 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
         await app.db.execute(dhrid, f"INSERT INTO dlog_meta(logid, source_city, source_company, destination_city, destination_company, cargo_name, cargo_mass) VALUES ({logid}, '{convertQuotation(source_city)}', '{convertQuotation(source_company)}', '{convertQuotation(destination_city)}', '{convertQuotation(destination_company)}', '{convertQuotation(cargo_name)}', {cargo_mass})")
         await app.db.commit(dhrid)
 
-        uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
-        await notification(request, "dlog", uid, ml.tr(request, "job_submitted", var = {"logid": logid}, force_lang = await GetUserLanguage(request, uid)), no_discord_notification = True)
+        if not external_driver:
+            uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
+            await notification(request, "dlog", uid, ml.tr(request, "job_submitted", var = {"logid": logid}, force_lang = await GetUserLanguage(request, uid)), no_discord_notification = True)
 
-        try:
-            totalpnt = await GetPoints(request, userid, app.default_rank_type_point_types)
-            if point2rank(app, "default", totalpnt) is not None:
-                bonus = point2rank(app, "default", totalpnt)["distance_bonus"]
-                rankname = point2rank(app, "default", totalpnt)["name"]
+            try:
+                totalpnt = await GetPoints(request, userid, app.default_rank_type_point_types)
+                if point2rank(app, "default", totalpnt) is not None:
+                    bonus = point2rank(app, "default", totalpnt)["distance_bonus"]
+                    rankname = point2rank(app, "default", totalpnt)["name"]
 
-                if bonus is not None and type(bonus) is dict:
-                    ok = True
-                    if bonus["min_distance"] != -1 and driven_distance < bonus["min_distance"]:
-                        ok = False
-                    if bonus["max_distance"] != -1 and driven_distance > bonus["max_distance"]:
-                        ok = False
-                    if ok and random.uniform(0, 1) <= bonus["probability"]:
-                        bonuspoint = 0
-                        if bonus["type"] == "fixed_value":
-                            bonuspoint = bonus["value"]
-                        elif bonus["type"] == "fixed_percentage":
-                            bonuspoint = round(bonus["value"] * driven_distance)
-                        elif bonus["type"] == "random_value":
-                            bonuspoint = random.randint(bonus["min"], bonus["max"])
-                        elif bonus["type"] == "random_percentage":
-                            bonuspoint = round(random.uniform(bonus["min"], bonus["max"]) * driven_distance)
-                        if bonuspoint != 0:
-                            await app.db.execute(dhrid, f"INSERT INTO bonus_point VALUES ({userid}, {bonuspoint}, 'auto:distance-bonus/{logid}', NULL, {int(time.time())})")
-                            await app.db.commit(dhrid)
-                            await notification(request, "bonus", uid, ml.tr(request, "earned_bonus_point", var = {"bonus_points": str(bonuspoint), "logid": logid, "rankname": rankname}, force_lang = await GetUserLanguage(request, uid)))
+                    if bonus is not None and type(bonus) is dict:
+                        ok = True
+                        if bonus["min_distance"] != -1 and driven_distance < bonus["min_distance"]:
+                            ok = False
+                        if bonus["max_distance"] != -1 and driven_distance > bonus["max_distance"]:
+                            ok = False
+                        if ok and random.uniform(0, 1) <= bonus["probability"]:
+                            bonuspoint = 0
+                            if bonus["type"] == "fixed_value":
+                                bonuspoint = bonus["value"]
+                            elif bonus["type"] == "fixed_percentage":
+                                bonuspoint = round(bonus["value"] * driven_distance)
+                            elif bonus["type"] == "random_value":
+                                bonuspoint = random.randint(bonus["min"], bonus["max"])
+                            elif bonus["type"] == "random_percentage":
+                                bonuspoint = round(random.uniform(bonus["min"], bonus["max"]) * driven_distance)
+                            if bonuspoint != 0:
+                                await app.db.execute(dhrid, f"INSERT INTO bonus_point VALUES ({userid}, {bonuspoint}, 'auto:distance-bonus/{logid}', NULL, {int(time.time())})")
+                                await app.db.commit(dhrid)
+                                await notification(request, "bonus", uid, ml.tr(request, "earned_bonus_point", var = {"bonus_points": str(bonuspoint), "logid": logid, "rankname": rankname}, force_lang = await GetUserLanguage(request, uid)))
 
-        except Exception as exc:
-            from api import tracebackHandler
-            await tracebackHandler(request, exc, traceback.format_exc())
+            except Exception as exc:
+                from api import tracebackHandler
+                await tracebackHandler(request, exc, traceback.format_exc())
 
-    if isdelivered and not duplicate:
+    if isdelivered and not duplicate and not external_driver:
         if (app.config.hook_delivery_log.channel_id != "" or app.config.hook_delivery_log.webhook_url != "") \
                 and app.config.discord_bot_token != "":
             await publish_webhook(request, userid, username, discordid, logid, tracker, data, original_data, event_type, driven_distance, revenue, offence)
