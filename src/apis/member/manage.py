@@ -7,6 +7,8 @@ import time
 from fastapi import Header, Request, Response
 from typing import Optional
 
+from public_id_store import insert_delivery
+
 import multilang as ml
 from functions import *
 
@@ -257,10 +259,18 @@ async def patch_points(request: Request, response: Response, userid: int, author
         plogid = nint(await app.db.fetchone(dhrid)) - 1
         dlog_data = json.dumps({"staff_userid": au["userid"], "note": distance_note})
         if distance > 0:
-            await app.db.execute(dhrid, f"INSERT INTO dlog(logid, userid, data, topspeed, timestamp, isdelivered, profit, unit, fuel, distance, trackerid, tracker_type, view_count) VALUES ({plogid}, {userid}, '{convertQuotation(dlog_data)}', 0, {int(time.time())}, 1, 0, 1, 0, {distance}, -1, 0, 0)")
+            job_timestamp = int(time.time())
+            await insert_delivery(app, dhrid, {"logid": plogid, "userid": userid,
+                "data": dlog_data, "topspeed": 0, "timestamp": job_timestamp,
+                "isdelivered": 1, "profit": 0, "unit": 1, "fuel": 0,
+                "distance": distance, "trackerid": -1, "tracker_type": 0, "view_count": 0}, job_timestamp)
             await app.db.execute(dhrid, f"INSERT INTO dlog_meta(logid, note) VALUES ({plogid}, '{au['userid']},{convertQuotation(distance_note)}')")
         else:
-            await app.db.execute(dhrid, f"INSERT INTO dlog(logid, userid, data, topspeed, timestamp, isdelivered, profit, unit, fuel, distance, trackerid, tracker_type, view_count) VALUES ({plogid}, {userid}, '{convertQuotation(dlog_data)}', 0, {int(time.time())}, 0, 0, 1, 0, {distance}, -1, 0, 0)")
+            job_timestamp = int(time.time())
+            await insert_delivery(app, dhrid, {"logid": plogid, "userid": userid,
+                "data": dlog_data, "topspeed": 0, "timestamp": job_timestamp,
+                "isdelivered": 0, "profit": 0, "unit": 1, "fuel": 0,
+                "distance": distance, "trackerid": -1, "tracker_type": 0, "view_count": 0}, job_timestamp)
             await app.db.execute(dhrid, f"INSERT INTO dlog_meta(logid, note) VALUES ({plogid}, '{au['userid']}, {convertQuotation(distance_note)}')")
         await UpdateRoleConnection(request, (await GetUserInfo(request, userid = userid, is_internal_function = True))["discordid"])
         await app.db.commit(dhrid)

@@ -59,9 +59,9 @@ async def get_export(request: Request, response: Response, authorization: str = 
     app.redis.set("running_export", int(time.time()))
 
     if not include_ids:
-        f.write(b"logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_city, destination_company, destination_city, logged_distance, planned_distance, reported_distance, cargo, cargo_mass, cargo_damage, truck_brand, truck_name, license_plate, license_plate_country, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, challenge, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp\n")
+        f.write(b"logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_city, destination_company, destination_city, logged_distance, planned_distance, reported_distance, cargo, cargo_mass, cargo_damage, truck_brand, truck_name, license_plate, license_plate_country, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, challenge, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp, public_id\n")
     else:
-        f.write(b"logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_company_id, source_city, source_city_id, destination_company, destination_company_id, destination_city, destination_city_id, logged_distance, planned_distance, reported_distance, cargo, cargo_id, cargo_mass, cargo_damage, truck_brand, truck_brand_id, truck_name, truck_id, license_plate, license_plate_country, license_plate_country_id, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, division_id, challenge, challenge_id, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp\n")
+        f.write(b"logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_company_id, source_city, source_city_id, destination_company, destination_company_id, destination_city, destination_city_id, logged_distance, planned_distance, reported_distance, cargo, cargo_id, cargo_mass, cargo_damage, truck_brand, truck_brand_id, truck_name, truck_id, license_plate, license_plate_country, license_plate_country_id, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, division_id, challenge, challenge_id, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp, public_id\n")
 
     await app.db.execute(dhrid, f"SELECT COUNT(dlog.logid), MIN(dlog.logid), MAX(dlog.logid) FROM dlog WHERE timestamp >= {after} AND timestamp <= {before} {limit} AND logid >= 0")
     t = await app.db.fetchone(dhrid)
@@ -120,7 +120,7 @@ async def get_export(request: Request, response: Response, authorization: str = 
             try:
                 await asyncio.sleep(0.1)
                 await app.db.extend_conn(dhrid, 30)
-                await app.db.execute(dhrid, f"SELECT dlog.logid, dlog.userid, dlog.topspeed, dlog.unit, dlog.profit, dlog.unit, dlog.fuel, dlog.distance, dlog.data, dlog.isdelivered, dlog.timestamp, dlog.tracker_type FROM dlog \
+                await app.db.execute(dhrid, f"SELECT dlog.logid, dlog.userid, dlog.topspeed, dlog.unit, dlog.profit, dlog.unit, dlog.fuel, dlog.distance, dlog.data, dlog.isdelivered, dlog.timestamp, dlog.tracker_type, dlog.public_id FROM dlog \
                     WHERE dlog.logid >= {min_logid + page * page_size} AND dlog.logid <= {min(min_logid + (page + 1) * page_size, max_logid)} {limit}")
                 d = await app.db.fetchall(dhrid)
                 ok = True
@@ -366,6 +366,7 @@ async def get_export(request: Request, response: Response, authorization: str = 
             else:
                 data = [logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_company_id, source_city, source_city_id, destination_company, destination_company_id, destination_city, destination_city_id, logged_distance, planned_distance, reported_distance, cargo, cargo_id, cargo_mass, cargo_damage, truck_brand, truck_brand_id, truck_name, truck_id, license_plate, license_plate_country, license_plate_country_id, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, division_id, challenge, challenge_id, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp]
 
+            data.append(dd[12])
             for i in range(len(data)):
                 if data[i] is None:
                     data[i] = '""'

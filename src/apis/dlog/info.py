@@ -7,17 +7,22 @@ from typing import Optional
 
 from fastapi import Header, Request, Response
 
+from delivery_filters import metadata_filters
+from public_id_store import resolve_public_id
+
 import multilang as ml
 from functions import *
 
 
 async def get_list(request: Request, response: Response, authorization: str = Header(None), \
         page: Optional[int] = 1, page_size: Optional[int] = 10, \
-        order_by: Optional[str] = "logid", order: Optional[str] = None, \
+        order_by: Optional[str] = "timestamp", order: Optional[str] = None, \
         speed_limit: Optional[int] = None, userid: Optional[int] = None, \
         after_logid: Optional[int] = None, after: Optional[int] = None, before: Optional[int] = None, \
         game: Optional[int] = None, status: Optional[int] = None,\
-        challenge: Optional[str] = "any", division: Optional[str] = "any", manual: Optional[bool] = False):
+        challenge: Optional[str] = "any", division: Optional[str] = "any", manual: Optional[bool] = False,
+        steamid: Optional[str] = None, source: Optional[str] = None,
+        destination: Optional[str] = None, cargo: Optional[str] = None):
     '''`challenge` and `division` can only be include/only/none/any/{id}'''
     app = request.app
     dhrid = request.state.dhrid
@@ -63,7 +68,26 @@ async def get_list(request: Request, response: Response, authorization: str = He
     if order_by == "views":
         order_by = "view_count"
 
+    try:
+        metadata_limit, metadata_args = metadata_filters(source, destination, cargo)
+    except ValueError as exc:
+        response.status_code = 422
+        return {"error": str(exc)}
     limit = ""
+    if steamid is not None:
+        if not steamid.isascii() or not steamid.isdigit() or len(steamid) != 17:
+            response.status_code = 422
+            return {"error": "Invalid Steam ID."}
+        if app.config.privacy and authorization is None:
+            response.status_code = 401
+            return {"error": "Authentication required."}
+        await app.db.execute(dhrid, "SELECT logid,data FROM dlog WHERE tracker_type=3 AND logid>=0")
+        matching = []
+        for lid, raw in await app.db.fetchall(dhrid):
+            obj = json.loads(decompress(raw))["data"]["object"]
+            if str(obj["driver"]["steam_id"]) == steamid:
+                matching.append(str(int(lid)))
+        limit += "AND dlog.logid IN (" + (",".join(matching) or "NULL") + ") "
     if quserid is not None:
         limit += f"AND dlog.userid = {quserid} "
     if challenge == "include":
@@ -119,10 +143,10 @@ async def get_list(request: Request, response: Response, authorization: str = He
     if game == 1 or game == 2:
         gamelimit = f" AND dlog.unit = {game}"
 
-    await app.db.execute(dhrid, f"SELECT dlog.userid, dlog_meta.note, dlog.timestamp, dlog.logid, dlog.profit, dlog.unit, dlog.distance, dlog.isdelivered, division.divisionid, division.status, dlog.topspeed, dlog.fuel, dlog.view_count, dlog_meta.source_city, dlog_meta.source_company, dlog_meta.destination_city, dlog_meta.destination_company, dlog_meta.cargo_name, dlog_meta.cargo_mass, dlog.data FROM dlog \
+    await app.db.execute(dhrid, f"SELECT dlog.userid, dlog_meta.note, dlog.timestamp, dlog.logid, dlog.profit, dlog.unit, dlog.distance, dlog.isdelivered, division.divisionid, division.status, dlog.topspeed, dlog.fuel, dlog.view_count, dlog_meta.source_city, dlog_meta.source_company, dlog_meta.destination_city, dlog_meta.destination_company, dlog_meta.cargo_name, dlog_meta.cargo_mass, dlog.data, dlog.public_id FROM dlog \
         LEFT JOIN division ON dlog.logid = division.logid \
         LEFT JOIN dlog_meta ON dlog.logid = dlog_meta.logid \
-        WHERE {'dlog.logid >= 0' if not manual else 'dlog.logid < 0'} {limit} {timelimit} {speed_limit} {gamelimit} {status_limit} ORDER BY dlog.{order_by} {order}, dlog.logid DESC LIMIT {max(page-1, 0) * page_size}, {page_size}")
+        WHERE {'dlog.logid >= 0' if not manual else 'dlog.logid < 0'} {limit} {timelimit} {speed_limit} {gamelimit} {status_limit} {metadata_limit} ORDER BY dlog.{order_by} {order}, dlog.logid DESC LIMIT {max(page-1, 0) * page_size}, {page_size}", metadata_args)
     ret = []
     t = await app.db.fetchall(dhrid)
     for ti in range(len(t)):
@@ -145,7 +169,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
             if userid == -1 and app.config.privacy:
                 staff_userinfo = await GetUserInfo(request, privacy = True)
 
-            ret.append({"logid": tt[3], "user": userinfo, "distance": distance, "staff": staff_userinfo, "note": staff_note, "timestamp": tt[2]})
+            ret.append({"logid": tt[3], "public_id": tt[20], "user": userinfo, "distance": distance, "staff": staff_userinfo, "note": staff_note, "timestamp": tt[2]})
             continue
 
         logid = tt[3]
@@ -204,7 +228,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
         if tt[7] == 0:
             status = 2
 
-        ret.append({"logid": logid, "user": userinfo, "distance": distance, \
+        ret.append({"logid": logid, "public_id": tt[20], "user": userinfo, "distance": distance, \
             "max_speed": tt[10], "fuel": tt[11], \
             "source_city": source_city, "source_company": source_company, \
                 "destination_city": destination_city, "destination_company": destination_company, \
@@ -212,7 +236,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
                         "division": division, "challenge": challenge, \
                             "status": status, "views": tt[12], "timestamp": tt[2]})
 
-    await app.db.execute(dhrid, f"SELECT COUNT(*) FROM dlog WHERE {'logid >= 0' if not manual else 'logid < 0'} {limit} {timelimit} {speed_limit} {gamelimit} {status_limit}")
+    await app.db.execute(dhrid, f"SELECT COUNT(*) FROM dlog WHERE {'logid >= 0' if not manual else 'logid < 0'} {limit} {timelimit} {speed_limit} {gamelimit} {status_limit} {metadata_limit}", metadata_args)
     t = await app.db.fetchall(dhrid)
     tot = 0
     if len(t) > 0:
@@ -246,7 +270,7 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
         response.status_code = 404
         return {"error": ml.tr(request, "delivery_log_not_found")}
 
-    await app.db.execute(dhrid, f"SELECT userid, data, timestamp, distance, view_count, trackerid, tracker_type FROM dlog WHERE logid >= 0 AND logid = {logid}")
+    await app.db.execute(dhrid, f"SELECT userid, data, timestamp, distance, view_count, trackerid, tracker_type, public_id FROM dlog WHERE logid >= 0 AND logid = {logid}")
     t = await app.db.fetchall(dhrid)
     if len(t) == 0:
         response.status_code = 404
@@ -337,7 +361,7 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
         if "is_deleted" in userinfo:
             userinfo = await GetUserInfo(request, -1)
 
-    return {"logid": logid, "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
+    return {"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
         "distance": distance, "division": division, "challenge": challenge, \
             "timestamp": t[0][2], "views": view_count, \
             "detail": data, "telemetry": telemetry}
@@ -359,21 +383,36 @@ async def delete_dlog(request: Request, response: Response, logid: int, authoriz
         del au["code"]
         return au
 
-    await app.db.execute(dhrid, f"SELECT userid FROM dlog WHERE logid = {logid} AND logid >= 0")
+    await app.db.execute(dhrid, f"SELECT userid, public_id FROM dlog WHERE logid = {logid} AND logid >= 0")
     t = await app.db.fetchall(dhrid)
     if len(t) == 0:
         response.status_code = 404
         return {"error": ml.tr(request, "delivery_log_not_found")}
-    userid = t[0][0]
+    userid, public_id = t[0]
 
-    await app.db.execute(dhrid, f"INSERT INTO dlog_deleted SELECT * FROM dlog WHERE logid = {logid}")
+    archive_columns = "logid,userid,data,topspeed,timestamp,isdelivered,profit,unit,fuel,distance,trackerid,tracker_type,view_count,public_id,imported_at"
+    await app.db.execute(dhrid, f"INSERT INTO dlog_deleted ({archive_columns}) SELECT {archive_columns} FROM dlog WHERE logid = %s", (logid,))
     await app.db.execute(dhrid, f"DELETE FROM dlog WHERE logid = {logid}")
     await app.db.execute(dhrid, f"DELETE FROM dlog_meta WHERE logid = {logid}")
     await app.db.commit(dhrid)
 
-    await AuditLog(request, au["uid"], "dlog", ml.ctr(request, "deleted_delivery", var = {"logid": logid}))
+    await AuditLog(request, au["uid"], "dlog", ml.ctr(request, "deleted_delivery", var = {"logid": public_id}))
 
     uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
-    await notification(request, "dlog", uid, ml.tr(request, "job_deleted", var = {"logid": logid}, force_lang = await GetUserLanguage(request, uid)))
+    await notification(request, "dlog", uid, ml.tr(request, "job_deleted", var = {"logid": public_id}, force_lang = await GetUserLanguage(request, uid)))
 
     return Response(status_code=204)
+
+
+async def get_public_dlog(request: Request, response: Response, public_id: str,
+                          authorization: str = Header(None)):
+    # Same authorization/privacy behavior and numeric service implementation.
+    from public_ids import validate_public_id
+    if not validate_public_id(public_id):
+        response.status_code = 400
+        return {"error": "Invalid Public ID checksum or format"}
+    app = request.app
+    rid = request.state.dhrid
+    await app.db.new_conn(rid, db_name=app.config.db_name)
+    logid = await resolve_public_id(app, rid, public_id)
+    return await get_dlog(request, response, logid, authorization)

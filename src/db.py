@@ -14,6 +14,8 @@ from logger import logger
 
 
 def init(config, version):
+    from public_ids import PublicIDs
+    public_ids = PublicIDs.from_env()
     # we create an individual connection to init the app
     # we do not use master db pool here
     conn = pymysql.connect(host = config.db_host, port = config.db_port, user = config.db_user, passwd = config.db_password, db = config.db_name)
@@ -45,11 +47,11 @@ def init(config, version):
     cur.execute("CREATE TABLE IF NOT EXISTS bonus_point (userid INT, point INT, note VARCHAR(256), staff_userid INT, timestamp BIGINT)")
     cur.execute("CREATE TABLE IF NOT EXISTS daily_bonus_history (userid INT, point INT, streak INT, timestamp BIGINT)")
 
-    cur.execute(f"CREATE TABLE IF NOT EXISTS dlog (logid INT AUTO_INCREMENT PRIMARY KEY, userid INT, data MEDIUMTEXT, topspeed FLOAT, timestamp BIGINT, isdelivered INT, profit DOUBLE, unit INT, fuel DOUBLE, distance DOUBLE, trackerid BIGINT, tracker_type INT, view_count INT){data_directory_clause}")
+    cur.execute(f"CREATE TABLE IF NOT EXISTS dlog (logid INT AUTO_INCREMENT PRIMARY KEY, userid INT, data MEDIUMTEXT, topspeed FLOAT, timestamp BIGINT, isdelivered INT, profit DOUBLE, unit INT, fuel DOUBLE, distance DOUBLE, trackerid BIGINT, tracker_type INT, view_count INT, public_id CHAR(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, imported_at BIGINT NULL, UNIQUE KEY uq_dlog_public_id (public_id)){data_directory_clause}")
     # unit = 1: euro | 2: dollar
     cur.execute(f"CREATE TABLE IF NOT EXISTS dlog_meta (logid INT, source_city TEXT, source_company TEXT, destination_city TEXT, destination_company TEXT, cargo_name TEXT, cargo_mass INT, note TEXT){data_directory_clause}")
     # dlog_meta is for /dlog/list API (so we won't have to query the whole data column)
-    cur.execute(f"CREATE TABLE IF NOT EXISTS dlog_deleted (logid INT, userid INT, data MEDIUMTEXT, topspeed FLOAT, timestamp BIGINT, isdelivered INT, profit DOUBLE, unit INT, fuel DOUBLE, distance DOUBLE, trackerid BIGINT, tracker_type INT, view_count INT){data_directory_clause}")
+    cur.execute(f"CREATE TABLE IF NOT EXISTS dlog_deleted (logid INT, userid INT, data MEDIUMTEXT, topspeed FLOAT, timestamp BIGINT, isdelivered INT, profit DOUBLE, unit INT, fuel DOUBLE, distance DOUBLE, trackerid BIGINT, tracker_type INT, view_count INT, public_id CHAR(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, imported_at BIGINT NULL, UNIQUE KEY uq_dlog_public_id (public_id)){data_directory_clause}")
     # since negative logid refers to manual logs in main table, we need a separate table to keep deleted data
     cur.execute("CREATE TABLE IF NOT EXISTS dlog_stats (item_type INT, userid INT, item_key TEXT, item_name TEXT, count BIGINT, sum BIGINT)")
     # item_type = 1: truck | 2: trailer | 3: plate_country | 4: cargo | 5: cargo_market | 6: source_city | 7: source_company | 8: destination_city | 9: destination_company | 10: fine | 11: speeding | 12: tollgate | 13: ferry | 14: train | 15: collision | 16: teleport | 17: game_mode (single_player/multi_player/scs_convoy)
@@ -252,6 +254,8 @@ def init(config, version):
                 f"Resolve duplicates before restarting backend-init."
             ) from exc
 
+    from public_id_migration import prepare
+    prepare(cur, public_ids)
     conn.commit()
     cur.close()
     conn.close()

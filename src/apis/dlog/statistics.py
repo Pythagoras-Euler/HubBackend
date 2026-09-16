@@ -26,7 +26,7 @@ def rebuild(app):
 
     conn = genconn(app.config)
     cur = conn.cursor()
-    cur.execute("SELECT logid, userid, data FROM dlog WHERE logid >= 0 AND userid >= 0")
+    cur.execute("SELECT logid, userid, data FROM dlog WHERE logid >= 0 AND userid >= -1")
     t = cur.fetchall()
 
     max_log_id = 0
@@ -168,7 +168,7 @@ def rebuild(app):
                 if not duplicate:
                     dlog_stats[K[etype]].append(item)
 
-        for stat_userid in [userid, -1]:
+        for stat_userid in dict.fromkeys([userid, -1]):
             for itype in dlog_stats.keys():
                 for dd in dlog_stats[itype]:
                     if (itype, stat_userid, dd[0]) not in memtable.keys():
@@ -377,7 +377,7 @@ async def get_summary(request: Request, response: Response, authorization: str =
         IFNULL(SUM(CASE WHEN unit = 2 AND isdelivered = 1 AND timestamp >= {after} AND timestamp <= {before} THEN profit END), 0) AS ats_profit_1_1, \
         IFNULL(SUM(CASE WHEN unit = 2 AND isdelivered = 0 AND timestamp <= {before} THEN profit END), 0) AS ats_profit_0_0, \
         IFNULL(SUM(CASE WHEN unit = 2 AND isdelivered = 0 AND timestamp >= {after} AND timestamp <= {before} THEN profit END), 0) AS ats_profit_0_1 \
-        FROM dlog WHERE userid >= 0 {quser}) AS stats")
+        FROM dlog WHERE userid >= -1 {quser}) AS stats")
     t = list(await app.db.fetchone(dhrid))
     t = [nint(x) for x in t]
     keys = [desc[0] for desc in app.db.conns[dhrid][1].description]
@@ -514,7 +514,7 @@ async def get_chart(request: Request, response: Response, authorization: Optiona
     FROM TimeRanges tr
     LEFT JOIN dlog d ON d.timestamp >= tr.start_time
         AND d.timestamp < tr.end_time
-        AND d.userid >= 0 {quser}
+        AND d.userid >= -1 {quser}
     GROUP BY tr.start_time, tr.end_time
     ORDER BY tr.start_time"""
 

@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 
 import apis.tracker.tracksim as tracksim
 import apis.tracker.trucky as trucky
+import apis.tracker.trucky_history as trucky_history
 import apis.tracker.custom as custom
 import apis.tracker.unitracker as unitracker
 
@@ -20,6 +21,8 @@ routes_tracksim_route = [
 ]
 
 routes_trucky = [
+    APIRoute("/trucky/drivers", trucky_history.get_drivers, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/trucky/sync-status", trucky_history.get_sync_status, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/update", trucky.post_update, methods=["POST"], response_class=JSONResponse),
     APIRoute("/trucky/import/{jobid}", trucky.post_import, methods=["POST"], response_class=JSONResponse),
     APIRoute("/trucky/driver/{userid}", trucky.put_driver, methods=["PUT"], response_class=JSONResponse),

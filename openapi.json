@@ -3124,6 +3124,36 @@
                 "responses": {}
             }
         },
+        "/dlog/public/{public_id}": {
+            "get": {
+                "summary": "Get delivery by Public ID",
+                "tags": [
+                    "dlog"
+                ],
+                "operationId": "get_public_dlog",
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "applicationAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "minLength": 8,
+                            "maxLength": 8
+                        },
+                        "name": "public_id",
+                        "in": "path",
+                        "description": "Persistent Public ID (not internal logid)"
+                    }
+                ],
+                "responses": {},
+                "description": "Case-insensitive eight-character Public ID with checksum. Uses the same authorization and privacy rules as numeric lookup. Invalid format: 400; missing delivery: 404."
+            }
+        },
         "/dlog/{logid}": {
             "get": {
                 "summary": "Get Delivery Log",
@@ -3212,7 +3242,8 @@
                         "required": false,
                         "schema": {
                             "title": "Order by (logid, userid, max_speed, profit, fuel, distance, views, timestamp)",
-                            "type": "string"
+                            "type": "string",
+                            "default": "timestamp"
                         },
                         "name": "order_by",
                         "in": "query"
@@ -3221,7 +3252,8 @@
                         "required": false,
                         "schema": {
                             "title": "Order (asc, desc)",
-                            "type": "string"
+                            "type": "string",
+                            "default": "desc"
                         },
                         "name": "order",
                         "in": "query"
@@ -3315,9 +3347,46 @@
                         },
                         "name": "manual",
                         "in": "query"
+                    },
+                    {
+                        "name": "source",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Literal substring of departure city or company"
+                    },
+                    {
+                        "name": "destination",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Literal substring of destination city or company"
+                    },
+                    {
+                        "name": "cargo",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Literal substring of cargo name"
+                    },
+                    {
+                        "name": "steamid",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Trucky driver Steam ID, including external drivers"
                     }
                 ],
-                "responses": {}
+                "responses": {},
+                "description": "Returns persistent public_id alongside internal logid. Filters combine with AND. Default order: business timestamp descending, internal logid as stable tie-breaker. Profit sorts stored numeric amounts without currency conversion; use game filter to compare one currency."
             }
         },
         "/dlog/statistics/summary": {

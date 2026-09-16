@@ -335,7 +335,7 @@ async def UpdateDlogStats(app):
                                 dlog_stats[K[etype]].append(item)
 
                     await app.db.extend_conn(dhrid, 5)
-                    for stat_userid in [userid, -1]:
+                    for stat_userid in dict.fromkeys([userid, -1]):
                         # -1 refers to company
                         p = {}
                         pname = {}

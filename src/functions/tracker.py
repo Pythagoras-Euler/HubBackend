@@ -7,6 +7,9 @@ import traceback
 from datetime import datetime, timezone
 from random import randint
 
+from public_id_store import insert_delivery
+from public_ids import business_date
+
 import multilang as ml
 from functions import arequests, gensecret, point2rank
 from functions.dataop import *
@@ -210,7 +213,9 @@ async def publish_webhook(request, userid, username, discordid, logid, tracker, 
         if not isurl(imgurl):
             imgurl = ""
         dhulink = app.config.frontend_urls.member.replace("{userid}", str(userid))
-        dlglink = app.config.frontend_urls.delivery.replace("{logid}", str(logid))
+        await app.db.execute(dhrid, "SELECT public_id FROM dlog WHERE logid=%s", (logid,))
+        public_id = (await app.db.fetchone(dhrid))[0]
+        dlglink = app.config.frontend_urls.delivery.replace("{logid}", "public/" + public_id)
 
         if app.config.distance_unit == "imperial":
             dist_val, dist_unit = int(driven_distance * 0.621371), "mi"
@@ -222,7 +227,7 @@ async def publish_webhook(request, userid, username, discordid, logid, tracker, 
             cargo_val, cargo_unit = int(cargo_mass / 1000), "t" # Metric Tonne
 
         embed_data = {"embeds": [{
-            "title": f"{ml.ctr(request, 'delivery')} #{logid}",
+            "title": f"{ml.ctr(request, 'delivery')} #{public_id}",
             "url": dlglink,
             "fields": [
                 {"name": ml.ctr(request, "driver"), "value": f"[{username}]({dhulink})", "inline": True},
@@ -257,7 +262,7 @@ async def publish_webhook(request, userid, username, discordid, logid, tracker, 
         uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
         language = await GetUserLanguage(request, uid)
         embed_data = {"embeds": [{
-            "title": f"{ml.tr(request, 'delivery', force_lang = language)} #{logid}",
+            "title": f"{ml.tr(request, 'delivery', force_lang = language)} #{public_id}",
             "url": dlglink,
             "fields": [
                 {"name": ml.tr(request, "driver", force_lang = language), "value": f"[{username}]({dhulink})", "inline": True},
@@ -710,6 +715,14 @@ async def process_economy(request, userid, logid, data, driven_distance, revenue
         await tracebackHandler(request, exc, traceback.format_exc())
 
 TRACKER_MAP = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5}
+
+def get_job_timestamp(data, tracker):
+    """Use the normalized source completion time for every tracker and import."""
+    stopped_at = datetime.fromisoformat(data["stop_time"].replace("Z", "+00:00"))
+    if stopped_at.tzinfo is None:
+        stopped_at = stopped_at.replace(tzinfo=timezone.utc)
+    return int(stopped_at.timestamp())
+
 def get_external_driver_info(converted_data):
     """Build the public driver card for a delivery with no Hub account.
 
@@ -745,12 +758,13 @@ def get_external_driver_info(converted_data):
     }
 
 
-async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False, allow_external_driver = False):
+async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False, allow_external_driver = False, historical = False):
     (app, dhrid) = (request.app, request.state.dhrid)
     await app.db.extend_conn(dhrid, 10)
     data = converted_data["data"]["object"]
     event_type = converted_data["type"]
     tracker_type = TRACKER_MAP[tracker]
+    job_timestamp = get_job_timestamp(data, tracker)
 
     steamid = int(data["driver"]["steam_id"])
     await app.db.execute(dhrid, f"SELECT userid, name, uid, discordid, tracker_in_use, roles FROM user WHERE steamid = {steamid}")
@@ -831,7 +845,7 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
                 enabled_realistic_settings.append(attr)
 
     meta_revenue = revenue # metadata revenue (for aggregation only)
-    if "action" in app.config_dict["delivery_rules"].keys() \
+    if not historical and "action" in app.config_dict["delivery_rules"].keys() \
             and app.config_dict["delivery_rules"]["action"] != "keep_job":
         action = app.config_dict["delivery_rules"]["action"]
         delivery_rules = app.config_dict["delivery_rules"]
@@ -883,8 +897,12 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
             await app.db.commit(dhrid) # unlock table
             return (409, "Already logged.")
 
-        await app.db.execute(dhrid, f"INSERT INTO dlog(userid, data, topspeed, timestamp, isdelivered, profit, unit, fuel, distance, trackerid, tracker_type, view_count) VALUES ({userid}, '{compress(json.dumps(converted_data,separators=(',', ':')))}', {top_speed}, {int(time.time())}, {isdelivered}, {meta_revenue}, {gameid}, {fuel_used}, {driven_distance}, {logid_tracker}, {tracker_type}, 0)")
-        await app.db.commit(dhrid)
+        public_id = await insert_delivery(app, dhrid, {
+            "userid": userid, "data": compress(json.dumps(converted_data, separators=(',', ':'))),
+            "topspeed": top_speed, "timestamp": job_timestamp, "isdelivered": isdelivered,
+            "profit": meta_revenue, "unit": gameid, "fuel": fuel_used, "distance": driven_distance,
+            "trackerid": logid_tracker, "tracker_type": tracker_type, "view_count": 0,
+        }, business_date(data.get("stop_time")))
         await app.db.execute(dhrid, "SELECT LAST_INSERT_ID();")
         logid = (await app.db.fetchone(dhrid))[0]
 
@@ -908,9 +926,9 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
         await app.db.execute(dhrid, f"INSERT INTO dlog_meta(logid, source_city, source_company, destination_city, destination_company, cargo_name, cargo_mass) VALUES ({logid}, '{convertQuotation(source_city)}', '{convertQuotation(source_company)}', '{convertQuotation(destination_city)}', '{convertQuotation(destination_company)}', '{convertQuotation(cargo_name)}', {cargo_mass})")
         await app.db.commit(dhrid)
 
-        if not external_driver:
+        if not external_driver and not historical:
             uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
-            await notification(request, "dlog", uid, ml.tr(request, "job_submitted", var = {"logid": logid}, force_lang = await GetUserLanguage(request, uid)), no_discord_notification = True)
+            await notification(request, "dlog", uid, ml.tr(request, "job_submitted", var = {"logid": public_id}, force_lang = await GetUserLanguage(request, uid)), no_discord_notification = True)
 
             try:
                 totalpnt = await GetPoints(request, userid, app.default_rank_type_point_types)
@@ -937,13 +955,13 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
                             if bonuspoint != 0:
                                 await app.db.execute(dhrid, f"INSERT INTO bonus_point VALUES ({userid}, {bonuspoint}, 'auto:distance-bonus/{logid}', NULL, {int(time.time())})")
                                 await app.db.commit(dhrid)
-                                await notification(request, "bonus", uid, ml.tr(request, "earned_bonus_point", var = {"bonus_points": str(bonuspoint), "logid": logid, "rankname": rankname}, force_lang = await GetUserLanguage(request, uid)))
+                                await notification(request, "bonus", uid, ml.tr(request, "earned_bonus_point", var = {"bonus_points": str(bonuspoint), "logid": public_id, "rankname": rankname}, force_lang = await GetUserLanguage(request, uid)))
 
             except Exception as exc:
                 from api import tracebackHandler
                 await tracebackHandler(request, exc, traceback.format_exc())
 
-    if isdelivered and not duplicate and not external_driver:
+    if isdelivered and not duplicate and not external_driver and not historical:
         if (app.config.hook_delivery_log.channel_id != "" or app.config.hook_delivery_log.webhook_url != "") \
                 and app.config.discord_bot_token != "":
             await publish_webhook(request, userid, username, discordid, logid, tracker, data, original_data, event_type, driven_distance, revenue, offence)

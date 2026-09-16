@@ -23,7 +23,23 @@ from threads import *
 
 
 async def startup_event(app):
+    from public_ids import PublicIDs
+    app.public_ids = PublicIDs.from_env()
     await app.db.create_pool()
+    rid = "public-id-startup"
+    await app.db.new_conn(rid, db_name=app.config.db_name)
+    try:
+        await app.db.execute(rid, "SELECT fingerprint FROM public_id_config WHERE singleton=1")
+        config_row = await app.db.fetchone(rid)
+        if not config_row or config_row[0] != app.public_ids.fingerprint:
+            raise RuntimeError("Public ID key/epoch mismatch; restore the original configuration")
+        for table in ("dlog", "dlog_deleted"):
+            await app.db.execute(rid, f"SHOW COLUMNS FROM {table} LIKE 'public_id'")
+            column = await app.db.fetchone(rid)
+            if not column or column[2] != "NO":
+                raise RuntimeError("Run public_id_migration.py --apply with writers stopped first")
+    finally:
+        await app.db.close_conn(rid)
 
     loop = asyncio.get_event_loop()
 
@@ -35,6 +51,8 @@ async def startup_event(app):
     loop.create_task(RefreshDiscordAccessToken(app))
     loop.create_task(SendDailyBonusNotification(app))
     loop.create_task(UpdateDlogStats(app))
+    from functions.trucky_sync import sync_loop
+    loop.create_task(sync_loop(app))
 
     if "event" in app.config.plugins:
         from plugins.event import EventNotification

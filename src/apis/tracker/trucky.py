@@ -333,7 +333,7 @@ async def post_update(response: Response, request: Request):
         response.status_code = 400
         return {"error": "Only job_completed, job_canceled and user_joined_company events are accepted."}
 
-    result = await handle_new_job(request, original_data, converted_data, "trucky")
+    result = await handle_new_job(request, original_data, converted_data, "trucky", allow_external_driver = True)
     if len(result) == 2:
         response.status_code = result[0]
         return {"error": result[1]}
@@ -393,7 +393,7 @@ async def post_import(response: Response, request: Request, jobid: int, authoriz
         response.status_code = 400
         return {"error": "Only job_completed and job_canceled events are accepted."}
 
-    result = await handle_new_job(request, original_data, converted_data, "trucky", bypass_tracker_check = bypass_tracker_check, allow_external_driver = True)
+    result = await handle_new_job(request, original_data, converted_data, "trucky", bypass_tracker_check = bypass_tracker_check, allow_external_driver = True, historical = True)
     if len(result) == 2:
         response.status_code = result[0]
         return {"error": result[1]}
