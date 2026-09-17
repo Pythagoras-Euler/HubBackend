@@ -43,6 +43,7 @@ async def source_json(app, request_id, path, token):
 async def reconcile(app, tracker, lock):
     from apis.tracker.trucky import convert_format
     from functions.tracker import handle_new_job
+    from trucky_live import active_job
     rid = genrid()
     request = Request(scope={"type": "http", "app": app, "headers": [], "mocked": True})
     request.state.dhrid = rid
@@ -56,6 +57,7 @@ async def reconcile(app, tracker, lock):
         await app.db.execute(rid, 'SELECT trackerid FROM dlog WHERE tracker_type=3 UNION SELECT trackerid FROM dlog_deleted WHERE tracker_type=3')
         known = {int(row[0]) for row in await app.db.fetchall(rid)}
         seen = set()
+        active_jobs = []
         page = 1
         while True:
             if not lock.owned():
@@ -70,6 +72,12 @@ async def reconcile(app, tracker, lock):
                     continue
                 seen.add(jid)
                 counts['scanned'] += 1
+                if job.get('status') == 'in_progress':
+                    live = await source_json(app, rid, f'job/{jid}', tracker['api_token'])
+                    item = active_job(live)
+                    if item is not None:
+                        active_jobs.append(item)
+                    continue
                 if jid in known:
                     counts['existing'] += 1
                     continue
@@ -103,6 +111,8 @@ async def reconcile(app, tracker, lock):
             if not jobs:
                 raise ValueError('Trucky returned an empty page before end of history')
             page += 1
+        if not counts["failed"]:
+            app.redis.set(f"trucky-active:{company}", json.dumps({"updated_at": int(time.time()), "list": active_jobs}), ex=86400)
         app.redis.hset(state_key, mapping={**counts, "status": "partial" if counts['failed'] else "complete",
                                           "finished_at": int(time.time())})
         if not counts['failed']:
@@ -126,9 +136,18 @@ async def sync_loop(app):
                 if lock.acquire(blocking=False):
                     try:
                         await reconcile(app, tracker, lock)
+                        from functions.trucky_identity import sync_company
+                        identity_rid = genrid()
+                        identity_request = Request(scope={"type": "http", "app": app, "headers": [], "mocked": True})
+                        identity_request.state.dhrid = identity_rid
+                        try:
+                            await app.db.new_conn(identity_rid, db_name=app.config.db_name)
+                            await sync_company(identity_request, tracker)
+                        finally:
+                            await app.db.close_conn(identity_rid)
                     finally:
                         if lock.owned():
                             lock.release()
             except Exception as exc:
                 logger.warning('Trucky reconciliation worker: %s', exc)
-        await asyncio.sleep(900)
+        await asyncio.sleep(90)

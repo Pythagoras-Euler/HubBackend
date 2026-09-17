@@ -117,6 +117,9 @@ async def get_callback(request: Request, response: Response):
             await app.db.commit(dhrid)
             await AuditLog(request, uid, "user", ml.ctr(request, "cancelled_user_deletion", var = {"username": username, "uid": uid}))
 
+    from functions.trucky_identity import sync_login
+    await sync_login(request, uid, steamid)
+
     stoken = str(uuid.uuid4())
     while stoken[0] == "e":
         stoken = str(uuid.uuid4())

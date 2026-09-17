@@ -1,3 +1,5 @@
+import json
+import time
 from typing import Optional
 from fastapi import Header, Request, Response
 
@@ -35,6 +37,30 @@ async def get_sync_status(request: Request, response: Response, authorization: s
     if au['error']:
         response.status_code = au.pop('code')
         return au
-    return {'interval_seconds': 900, 'companies': [
+    return {'interval_seconds': 90, 'companies': [
         {'company_id': t['company_id'], **app.redis.hgetall(f"trucky-sync:{int(t['company_id'])}")}
         for t in app.config.trackers if t['type'] == 'trucky' and t.get('company_id')]}
+
+
+async def get_active_jobs(request: Request, response: Response, authorization: str = Header(None)):
+    app, rid = request.app, request.state.dhrid
+    limited, result = await ratelimit(request, 'GET /trucky/active', 60, 60)
+    if limited:
+        return result
+    if app.config.privacy:
+        await app.db.new_conn(rid, db_name=app.config.db_name)
+        au = await auth(authorization, request, allow_application_token=True)
+        if au['error']:
+            response.status_code = au.pop('code')
+            return au
+    jobs = {}
+    for tracker in app.config.trackers:
+        if tracker['type'] != 'trucky' or not tracker.get('company_id'):
+            continue
+        raw = app.redis.get(f"trucky-active:{int(tracker['company_id'])}")
+        if not raw:
+            continue
+        snapshot = json.loads(raw)
+        for item in snapshot['list']:
+            jobs[item['trackerid']] = {**item, 'stale': time.time()-snapshot['updated_at'] > 300}
+    return {'list': sorted(jobs.values(), key=lambda j: j.get('start_time') or '', reverse=True)}

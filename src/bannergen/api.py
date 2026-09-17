@@ -27,6 +27,7 @@ USER_AGENT = f"DriversHub/BannerGen ({os_info}; Python {py_version}) +https://dr
 # (must be similar length as English string, so that the font size will be the same)
 # also, we only made translations for the most popular languages
 LOCALIZATION = {
+    "zh": {"since": "加入于", "division": "部门", "distance": "里程", "income": "收入"},
     "en": {
         "since": "Since",
         "division": "Division",
@@ -142,6 +143,9 @@ async def get_banner(request: Request, response: Response):
     language = "en"
     if "language" in data.keys() and data["language"] in LOCALIZATION.keys():
         language = data["language"]
+    use_cjk = language == "zh" or any("\u2e80" <= c <= "\uffff" for key in ("name", "company_name", "highest_role", "rank", "division") for c in str(data.get(key) or ""))
+    def load_font(path, size):
+        return ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" if use_cjk else path, size)
 
     try:
         # validate color
@@ -154,19 +158,19 @@ async def get_banner(request: Request, response: Response):
         if time.time() - os.path.getmtime(f"/tmp/hub/banner/{fi}") > 1800:
             os.remove(f"/tmp/hub/banner/{fi}")
 
-    if os.path.exists(f"/tmp/hub/banner/{company_abbr}_{userid}.png"):
-        if time.time() - os.path.getmtime(f"/tmp/hub/banner/{company_abbr}_{userid}.png") <= 600:
-            response = StreamingResponse(iter([open(f"/tmp/hub/banner/{company_abbr}_{userid}.png","rb").read()]), media_type="image/jpeg")
+    if os.path.exists(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png"):
+        if time.time() - os.path.getmtime(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png") <= 600:
+            response = StreamingResponse(iter([open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png","rb").read()]), media_type="image/jpeg")
             return response
 
     logo = Image.new("RGBA", (200,200),(255,255,255))
     banner = Image.new("RGB", (1700,300),(255,255,255))
 
-    if os.path.exists(f"/tmp/hub/logo/{company_abbr}.png") and os.path.exists(f"/tmp/hub/template/{company_abbr}.png") and \
+    if os.path.exists(f"/tmp/hub/logo/{company_abbr}.png") and os.path.exists(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png") and \
             time.time() - os.path.getmtime(f"/tmp/hub/logo/{company_abbr}.png") <= 86400 and \
-            time.time() - os.path.getmtime(f"/tmp/hub/template/{company_abbr}.png") <= 86400: # update everyday
+            time.time() - os.path.getmtime(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png") <= 86400: # update everyday
         logo = Image.open(f"/tmp/hub/logo/{company_abbr}.png")
-        banner = Image.open(f"/tmp/hub/template/{company_abbr}.png")
+        banner = Image.open(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png")
     else:
         try:
             right = await arequests.get(logo_url, timeout = 5)
@@ -266,14 +270,14 @@ async def get_banner(request: Request, response: Response):
 
         # draw company name
         draw = ImageDraw.Draw(banner)
-        usH40 = ImageFont.truetype("./fonts/OpenSansExtraBold.ttf", 40)
+        usH40 = load_font("./fonts/OpenSansExtraBold.ttf", 40)
         theme_color = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
         company_name_len = usH40.getlength(f"{company_name}")
         draw.text((1700 - 20 - company_name_len, 235), f"{company_name}", fill=theme_color, font=usH40)
         del draw, usH40
 
         banner = banner.convert("RGB")
-        banner.save(f"/tmp/hub/template/{company_abbr}.png", optimize = True, quality=100)
+        banner.save(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png", optimize = True, quality=100)
 
     avatar = data["avatar"]
     avatarh = hashlib.sha256(avatar.encode()).hexdigest()[:16]
@@ -365,11 +369,11 @@ async def get_banner(request: Request, response: Response):
     name = data["name"]
     name = unicodedata.normalize('NFKC', name).lstrip(" ")
     tname = ""
-    all_printable = True
+    all_printable = not use_cjk
     for i in range(len(name)):
         if name[i] in string.printable:
             tname += name[i]
-        elif has_glyph(name[i]):
+        elif use_cjk or has_glyph(name[i]):
             tname += name[i]
             all_printable = False
     name = tname
@@ -387,13 +391,13 @@ async def get_banner(request: Request, response: Response):
         if all_printable:
             namew = ubuntu_mono_bold_font_wsize[fontsize] * len(name)
         else:
-            namefont = ImageFont.truetype("./fonts/JosefinSansBold.ttf", fontsize)
+            namefont = load_font("./fonts/JosefinSansBold.ttf", fontsize)
             namew = namefont.getlength(f"{name}")
         if namew > 420:
             right = fontsize - 1
         else:
             left = fontsize + 1
-    namefont = ImageFont.truetype("./fonts/JosefinSansBold.ttf", fontsize)
+    namefont = load_font("./fonts/JosefinSansBold.ttf", fontsize)
     namebb = namefont.getbbox(f"{remove_descenders(name)}")
     nameh = namebb[3] - namebb[1]
     offset = min(fontsize * 0.05, 20)
@@ -401,15 +405,15 @@ async def get_banner(request: Request, response: Response):
     del namefont
     # y = 50 ~ 70
 
-    fontsize -= 20
+    fontsize = max(12, fontsize - 20)
     highest_role = data["highest_role"]
     highest_role = unicodedata.normalize('NFKC', highest_role).lstrip(" ")
-    hrolefont = ImageFont.truetype("./fonts/RussoOne.ttf", fontsize)
+    hrolefont = load_font("./fonts/RussoOne.ttf", fontsize)
     hrolew = hrolefont.getlength(f"{highest_role}")
     for _ in range(100):
         if hrolew > 410:
             fontsize -= 1
-            hrolefont = ImageFont.truetype("./fonts/RussoOne.ttf", fontsize)
+            hrolefont = load_font("./fonts/RussoOne.ttf", fontsize)
             hrolew = hrolefont.getlength(f"{highest_role}")
     hrolebb = hrolefont.getbbox(f"{remove_descenders(highest_role)}")
     hroleh = hrolebb[3] - hrolebb[1]
@@ -428,15 +432,15 @@ async def get_banner(request: Request, response: Response):
     division = unicodedata.normalize('NFKC', division).lstrip(" ")
     distance = data["distance"]
     profit = data["profit"]
-    joinedfont = ImageFont.truetype("./fonts/JosefinSans.ttf", 40)
+    joinedfont = load_font("./fonts/JosefinSans.ttf", 40)
     draw.text((325, 210), f"{LOCALIZATION[language]['since']} {joined}", fill=(0,0,0), font=joinedfont)
     del joinedfont
 
     # separate line
     draw.line((850, 25, 850, 275), fill=theme_color, width = 10)
 
-    anH40 = ImageFont.truetype("./fonts/RussoOne.ttf", 40)
-    coH40 = ImageFont.truetype("./fonts/UbuntuMonoBold.ttf", 40)
+    anH40 = load_font("./fonts/RussoOne.ttf", 40)
+    coH40 = load_font("./fonts/UbuntuMonoBold.ttf", 40)
     if data["first_row"] == "rank":
         rankw = anH40.getlength(f"{rank}")
         if rankw > 550:
@@ -479,7 +483,7 @@ async def get_banner(request: Request, response: Response):
     output = BytesIO()
     banner.save(output, "jpeg", optimize = True, quality=95)
     del banner, logo, avatar, draw
-    open(f"/tmp/hub/banner/{company_abbr}_{userid}.png","wb").write(output.getvalue())
+    open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png","wb").write(output.getvalue())
 
     response = StreamingResponse(iter([output.getvalue()]), media_type="image/jpeg")
     del output

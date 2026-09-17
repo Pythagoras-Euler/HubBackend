@@ -29,6 +29,8 @@ def init(config, version):
         data_directory_clause = f" DATA DIRECTORY = '{data_directory}'"
 
     cur.execute("CREATE TABLE IF NOT EXISTS user (uid INT AUTO_INCREMENT PRIMARY KEY, userid INT, name TEXT, email TEXT, avatar TEXT, bio TEXT, roles TEXT, discordid BIGINT UNSIGNED, steamid BIGINT UNSIGNED, truckersmpid BIGINT UNSIGNED, join_timestamp BIGINT, mfa_secret VARCHAR(16), tracker_in_use INT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS trucky_role_mapping (companyid BIGINT NOT NULL, source_roleid BIGINT NOT NULL, source_name VARCHAR(255), target_roleid INT NULL, confirmed TINYINT NOT NULL DEFAULT 0, PRIMARY KEY(companyid, source_roleid))")
+    cur.execute("CREATE TABLE IF NOT EXISTS trucky_identity (uid INT NOT NULL, companyid BIGINT NOT NULL, source_userid BIGINT NULL, assigned_userid INT, managed_roles TEXT, auto_admitted TINYINT NOT NULL DEFAULT 0, is_member TINYINT NOT NULL DEFAULT 0, checked_at BIGINT, PRIMARY KEY(uid,companyid))")
     cur.execute("CREATE TABLE IF NOT EXISTS discord_access_token (discordid BIGINT UNSIGNED, callback_url TEXT, access_token TEXT, refresh_token TEXT, expire_timestamp BIGINT)") # source is callback|connect
     # uid is unique identifier, userid is the actual member id
     cur.execute("CREATE TABLE IF NOT EXISTS user_password (uid INT, email TEXT, password TEXT)")

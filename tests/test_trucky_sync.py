@@ -8,6 +8,7 @@ import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 source = Path(__file__).resolve().parents[1] / 'src/functions/trucky_sync.py'
 tree = ast.parse(source.read_text(encoding='utf-8'))
 nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
@@ -21,6 +22,9 @@ exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec'), name
 class FakeRedis:
     def __init__(self):
         self.state = {}
+        self.snapshots = {}
+    def set(self, key, value, **kwargs):
+        self.snapshots[key] = json.loads(value)
     def hset(self, key, mapping):
         self.state.update(mapping)
 
@@ -74,6 +78,22 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_empty_intermediate_page_is_failure(self):
         await self.run_sync(AsyncMock(return_value={'data': [], 'total': 100, 'per_page': 10}), AsyncMock())
         self.assertEqual(self.app.redis.state['status'], 'failed')
+
+    async def test_active_jobs_do_not_enter_completed_import(self):
+        getter = AsyncMock(side_effect=[
+            {'data': [{'id': 12, 'status': 'in_progress'}], 'total': 1, 'per_page': 10},
+            {'id': 12, 'status': 'in_progress', 'driver': {'name': 'Test'}}])
+        handler = AsyncMock()
+        await self.run_sync(getter, handler)
+        handler.assert_not_awaited()
+        snapshot = self.app.redis.snapshots['trucky-active:36762']
+        self.assertEqual(snapshot['list'][0]['status'], 'in_progress')
+        self.assertEqual(snapshot['list'][0]['trackerid'], 12)
+
+    async def test_failed_refresh_does_not_replace_live_snapshot(self):
+        self.app.redis.snapshots['trucky-active:36762'] = {'list': [{'trackerid': 12}]}
+        await self.run_sync(AsyncMock(side_effect=RuntimeError('Trucky HTTP 503')), AsyncMock())
+        self.assertEqual(self.app.redis.snapshots['trucky-active:36762']['list'], [{'trackerid': 12}])
 
     def test_external_drivers_are_separate_and_include_both_games(self):
         def row(lid, steam, unit):
