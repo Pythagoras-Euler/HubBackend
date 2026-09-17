@@ -167,6 +167,26 @@ class SQLiteMigrationConnection:
 
 
 class MigrationTests(unittest.TestCase):
+    def test_force_renumbers_existing_but_preview_and_default_preserve_ids(self):
+        conn = SQLiteMigrationConnection()
+        self.addCleanup(conn.db.close)
+        raw = json.dumps({"data": {"object": {"stop_time": "2025-09-15"}}})
+        old = CODEC.generate_public_id("2026-09-01")
+        conn.db.execute("INSERT INTO dlog VALUES(1,1900000000,?,?,55,1900000000)", (raw, old))
+        conn.db.execute("INSERT INTO public_id_registry VALUES(?)", (old,))
+        with patch("public_id_migration.prepare"):
+            preview = backfill(conn, CODEC, False, force=True)
+            self.assertEqual(preview["generated"], 1)
+            self.assertEqual(conn.db.execute("SELECT public_id FROM dlog").fetchone()[0], old)
+            result = backfill(conn, CODEC, True, force=True)
+            self.assertEqual((result["existing"], result["generated"]), (1, 1))
+            new, legacy, imported = conn.db.execute("SELECT public_id,trackerid,imported_at FROM dlog").fetchone()
+            self.assertNotEqual(new, old)
+            self.assertEqual(CODEC.decode_time_bucket(new), "2025-09")
+            self.assertEqual((legacy, imported), (55, 1900000000))
+            backfill(conn, CODEC, True)
+            self.assertEqual(conn.db.execute("SELECT public_id FROM dlog").fetchone()[0], new)
+
     def test_backfill_rerun_legacy_dates_archives_and_missing_date(self):
         conn = SQLiteMigrationConnection()
         self.addCleanup(conn.db.close)

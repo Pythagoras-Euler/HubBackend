@@ -26,7 +26,7 @@
 - 校验：前七个字符数值乘以 `1,3,5,7,9,11,13` 后求和模 32。所有权重与 32 互质，因此检测所有单字符替换；不能检测所有换位或多字符错误。它不是鉴权机制，也不是 Crockford 扩展字符集的 mod-37 校验。
 - 输入去除首尾空格并转大写，不接受 I/L/O/U 的模糊别名。
 - `PublicIDs.encode_time_bucket()` / `decode_time_bucket()` 提供月份编解码；解码只返回 YYYY-MM。
-- 已生成编号持久化，修改业务日期/车辆/货物不会重算。没有 force 重新编号入口。
+- 已生成编号持久化，修改业务日期/车辆/货物不会重算。默认不重算；测试期可显式使用 `--force` 统一重新编号。
 
 同月空间为 33,554,432；出现生日碰撞是正常概率事件。数据库最终保证唯一，最多尝试 16 次。
 每次重试读取新 CSPRNG 熵，不能简单重试同一截断值。
@@ -88,9 +88,10 @@ docker compose up -d --build
 apply 分阶段执行：添加可空列及唯一索引 → 每批 500 条、以 logid 游标分页补齐 → 全部解决后设为 NOT NULL。
 MariaDB DDL 隐式提交，所以 schema 阶段不承诺整体事务回滚；各阶段可重跑。
 每批提交，崩溃后已提交的编号不会变化；未提交候选值可能变化，但尚未被公开。
-已有非空编号不重算，已有非法格式会报错并阻止完成约束收紧。
+默认已有非空编号不重算，已有非法格式会报错并阻止完成约束收紧。
+经确认可中断服务的测试环境，可以使用 `--dry-run --force` 和 `--apply --force`，为已有记录重新生成新版编号；旧 Public URL 不再解析，内部主键和 tracker ID 保留。force 每执行一次都会再次编号；恢复中断的强制迁移仍使用 force，已处理批次也可能再次编号，期间应保持停服。常规补齐继续使用普通 apply；旧号码只保留在防复用保留表，不建立旧号查询映射。
 有 unresolved/errors 时退出码为 1，backend 拒绝在尚可空的 schema 上启动。
-成功后退出码为 0，再恢复服务。没有在此次开发中运行生产迁移。
+成功后退出码为 0，再恢复服务。2026-09-17 已在 OCI 测试部署执行迁移，结果见部署记录。
 
 新安装设置固定配置后照常运行 backend-init，空表直接建立最终约束。
 需要回滚应用时，应同步回滚数据库备份；旧写入器不知道 NOT NULL 新列，不能直接混用。
@@ -125,7 +126,7 @@ npx vite build
 
 Python 测试包括真实 SQLite 唯一约束下的回填、MariaDB 1062 重试行为的注入测试，以及 API 查询/兼容路径测试。
 SQLite 适配层只验证回填 DML；它不代替 MariaDB DDL/真实多连接并发验证。
-本机 Docker daemon 不可用、未连接生产数据库，因此仍需要部署环境执行 dry-run 和迁移，并在测试库验证 MariaDB DDL。
+2026-09-16 本地验证时 Docker daemon 不可用。2026-09-17 已连接 OCI，完成真实 MariaDB DDL、214 条数据迁移、真实唯一冲突重试和临时表事务回滚验证。
 项目无已配置的 TypeScript 检查；本次使用 Python lint/编译、前端组件测试和完整 Vite 构建。
 
 ## 修改文件
@@ -152,3 +153,15 @@ H5C3J2GS H5MJTE9V H51CP8YX H5C148BE H5P1CEAX
 G4E4FDRC G4TPQERS G4J537XT G4GQCN1D G4C3CQZ9
 G494CZDF G4WD6X3Z G48CEPMC G4SJQ3TS G40Q63HH
 ```
+
+## 网页健康检查
+
+`GET /healthz` 由 Nginx 精确路由返回 HTTP 200、`text/plain` 的 `ok\n`，带 `Cache-Control: no-store`，不需要登录。它检查网页服务存活；后端另用 `/api/status` 检查。OCI 的 Caddy 保留现有主域名、测试域名及其他站点代理。
+
+## 2026-09-17 OCI 部署结果
+
+通过 `ssh oci-hub` 完成部署。38 项后端测试通过；214 条历史运单统一生成新版编号，缺失日期/冲突/错误均为 0。实际日期范围 2025-09-17 至 2026-09-15。迁移前后内部 ID、来源 ID、业务时间和原始数据摘要完全一致。新旧详情 API、默认时间倒序、利润排序、组合筛选和司机筛选已在线验证。
+
+主域名 `https://hub.debedidhaulage.cn/healthz` 和测试域名 `https://hubtest.pyeu.uk/healthz` 均返回 HTTP 200、`ok`、`Cache-Control: no-store`。后端 `/api/status` 报告 API active、database available；所有服务 healthy。
+
+服务器备份目录：`/home/ubuntu/HubDeploy/backups/public-ids-20260917T002926Z`，包含迁移前源码/配置、数据库 SQL、新配置备份和业务字段前后校验文件；旧镜像已打 rollback 标签。无需再人工执行此次迁移。

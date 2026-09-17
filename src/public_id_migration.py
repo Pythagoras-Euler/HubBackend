@@ -76,7 +76,7 @@ def prepare(cur, codec):
                     "WHERE public_id IS NOT NULL")
 
 
-def backfill(conn, codec=None, apply=False, batch_size=500, warn=print):
+def backfill(conn, codec=None, apply=False, batch_size=500, warn=print, force=False):
     from public_id_store import is_public_id_collision
     stats = dict(total=0, existing=0, generated=0, missing_date=0, collisions=0, errors=0)
     earliest = latest = None
@@ -100,10 +100,11 @@ def backfill(conn, codec=None, apply=False, batch_size=500, warn=print):
                 stats["total"] += 1
                 if public_id is not None:
                     stats["existing"] += 1
-                    if not validate_public_id(public_id) or public_id != normalize_public_id(public_id):
-                        stats["errors"] += 1
-                        warn(json.dumps(dict(table=table, logid=logid, warning="Invalid existing Public ID")))
-                    continue
+                    if not force:
+                        if not validate_public_id(public_id) or public_id != normalize_public_id(public_id):
+                            stats["errors"] += 1
+                            warn(json.dumps(dict(table=table, logid=logid, warning="Invalid existing Public ID")))
+                        continue
                 try:
                     day = stored_job_date(logid, timestamp, raw)
                 except (ValueError, TypeError, KeyError, OverflowError, zlib.error):
@@ -121,8 +122,9 @@ def backfill(conn, codec=None, apply=False, batch_size=500, warn=print):
                             cur.execute("SAVEPOINT public_id_row")
                             try:
                                 cur.execute("INSERT INTO public_id_registry VALUES (%s)", (candidate,))
+                                condition = "" if force else " AND public_id IS NULL"
                                 cur.execute(f"UPDATE {table} SET public_id=%s "
-                                            "WHERE logid=%s AND public_id IS NULL", (candidate, logid))
+                                            f"WHERE logid=%s{condition}", (candidate, logid))
                                 cur.execute("RELEASE SAVEPOINT public_id_row")
                                 break
                             except Exception as exc:
@@ -158,6 +160,8 @@ def main():
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--dry-run", action="store_true")
     parser.add_argument("--batch-size", type=int, default=500)
+    parser.add_argument("--force", action="store_true",
+                        help="Explicitly renumber existing IDs while all writers are stopped; old public URLs stop resolving")
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("batch-size must be positive")
@@ -167,7 +171,7 @@ def main():
                            user=os.environ["DB_USER"], password=os.environ["DB_PASSWORD"],
                            database=os.environ["DB_NAME"], autocommit=False)
     try:
-        result = backfill(conn, codec, args.apply, args.batch_size)
+        result = backfill(conn, codec, args.apply, args.batch_size, force=args.force)
         print(json.dumps(result, indent=2))
         return 1 if result["errors"] or result["missing_date"] else 0
     finally:
