@@ -6,7 +6,6 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime
 from typing import Optional
 from urllib.parse import parse_qs
 
@@ -14,6 +13,7 @@ from fastapi import Header, Request, Response
 
 import multilang as ml
 from functions import *
+from trucky_time import normalize_time, time_seconds
 
 
 def convert_format(data):
@@ -60,7 +60,7 @@ def convert_format(data):
     events = []
     event_type_mapping = {"teleport": "teleport", "truck_fixed": "repair", "job_resumed": "job.resumed", "fined": "fine", "tollgate_paid": "tollgate", "collision": "collision", "transport_used": "transport", "refuel": "refuel"}
     # transport needs to be handled manually
-    events.append({"location": None, "real_time": d["started_at"].split(".")[0]+"Z", "time": int(datetime.strptime(d["started_at"].split(".")[0]+"Z", "%Y-%m-%dT%H:%M:%SZ").timestamp()), "type": "job.started", "meta": {"autoLoaded": d["auto_load"]}})
+    events.append({"location": None, "real_time": normalize_time(d["started_at"]), "time": time_seconds(d["started_at"]), "type": "job.started", "meta": {"autoLoaded": d["auto_load"]}})
     for event in d["events"]:
         et = event_type_mapping[event["event_type"]]
         meta = {}
@@ -73,11 +73,11 @@ def convert_format(data):
         elif et == "transport":
             et = event["attributes"]["transport_type"]
             meta = {"cost": event["attributes"]["amount"], "source_id": event["attributes"]["source_id"], "source_name": event["attributes"]["source"], "target_id": event["attributes"]["target_id"], "target_name": event["attributes"]["target"]}
-        events.append({"location": {"x": event["x"], "y": event["y"], "z": event["z"]}, "real_time": event["created_at"].split(".")[0]+"Z", "time": int(datetime.strptime(event["created_at"].split(".")[0]+"Z", "%Y-%m-%dT%H:%M:%SZ").timestamp()), "type": et, "meta": meta})
+        events.append({"location": {"x": event["x"], "y": event["y"], "z": event["z"]}, "real_time": normalize_time(event["created_at"]), "time": time_seconds(event["created_at"]), "type": et, "meta": meta})
     if job_event_type == "job.delivered":
-        events.append({"location": None, "real_time": d["completed_at"].split(".")[0]+"Z", "time": int(datetime.strptime(d["completed_at"].split(".")[0]+"Z", "%Y-%m-%dT%H:%M:%SZ").timestamp()), "type": "job.delivered", "meta": {"revenue": d["income"], "revenue_details": d["income_details"], "earnedXP": None, "cargoDamage": round(d["cargo_damage"] / 100, 2), "distance": d["real_driven_distance_km"], "timeTaken": d["real_driving_time_seconds"], "autoParked": d["auto_park"]}}) # revenue_details is trucky exclusive
+        events.append({"location": None, "real_time": normalize_time(d["completed_at"]), "time": time_seconds(d["completed_at"]), "type": "job.delivered", "meta": {"revenue": d["income"], "revenue_details": d["income_details"], "earnedXP": None, "cargoDamage": round(d["cargo_damage"] / 100, 2), "distance": d["real_driven_distance_km"], "timeTaken": d["real_driving_time_seconds"], "autoParked": d["auto_park"]}}) # revenue_details is trucky exclusive
     elif job_event_type == "job.cancelled":
-        events.append({"location": None, "real_time": d["canceled_at"].split(".")[0]+"Z", "time": int(datetime.strptime(d["canceled_at"].split(".")[0]+"Z", "%Y-%m-%dT%H:%M:%SZ").timestamp()), "type": "job.cancelled", "meta": {"penalty": d["income"]}})
+        events.append({"location": None, "real_time": normalize_time(d["canceled_at"]), "time": time_seconds(d["canceled_at"]), "type": "job.cancelled", "meta": {"penalty": d["income"]}})
     if d["warp"] is None:
         d["warp"] = 1
     return {
@@ -93,8 +93,8 @@ def convert_format(data):
                     "username": d["driver"]["name"],
                     "profile_photo_url": d["driver"]["avatar_url"]
                 },
-                "start_time": d["started_at"].split(".")[0]+"Z",
-                "stop_time": d["completed_at"].split(".")[0]+"Z" if d["completed_at"] is not None else d["canceled_at"].split(".")[0]+"Z",
+                "start_time": normalize_time(d["started_at"]),
+                "stop_time": normalize_time(d["completed_at"]) if d["completed_at"] is not None else normalize_time(d["canceled_at"]),
                 "time_spent": d["real_driving_time_seconds"],
                 "planned_distance": d["planned_distance_km"],
                 "driven_distance": d["real_driven_distance_km"],
