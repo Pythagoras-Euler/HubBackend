@@ -17,6 +17,7 @@ import requests
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image, ImageDraw, ImageFont
+from banner_assets import cache_key, compose_background
 
 os_info = f"{platform.system()} {platform.release()}"
 py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -139,6 +140,7 @@ async def get_banner(request: Request, response: Response):
     bg_opacity = data["background_opacity"]
     hex_color = data["hex_color"][-6:]
     userid = data["userid"]
+    banner_key = cache_key(data)
 
     language = "en"
     if "language" in data.keys() and data["language"] in LOCALIZATION.keys():
@@ -158,115 +160,33 @@ async def get_banner(request: Request, response: Response):
         if time.time() - os.path.getmtime(f"/tmp/hub/banner/{fi}") > 1800:
             os.remove(f"/tmp/hub/banner/{fi}")
 
-    if os.path.exists(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png"):
-        if time.time() - os.path.getmtime(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png") <= 600:
-            response = StreamingResponse(iter([open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png","rb").read()]), media_type="image/jpeg")
+    if os.path.exists(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}_{banner_key}.png"):
+        if time.time() - os.path.getmtime(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}_{banner_key}.png") <= 600:
+            response = StreamingResponse(iter([open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}_{banner_key}.png","rb").read()]), media_type="image/jpeg")
             return response
 
-    logo = Image.new("RGBA", (200,200),(255,255,255))
-    banner = Image.new("RGB", (1700,300),(255,255,255))
-
-    if os.path.exists(f"/tmp/hub/logo/{company_abbr}.png") and os.path.exists(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png") and \
-            time.time() - os.path.getmtime(f"/tmp/hub/logo/{company_abbr}.png") <= 86400 and \
-            time.time() - os.path.getmtime(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png") <= 86400: # update everyday
-        logo = Image.open(f"/tmp/hub/logo/{company_abbr}.png")
-        banner = Image.open(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png")
+    logo = None
+    template_key = cache_key({"logo": logo_url, "background": bg_url, "opacity": bg_opacity,
+                              "name": company_name, "color": hex_color, "language": language, "cjk": use_cjk})
+    template_path = f"/tmp/hub/template/{company_abbr}_{template_key}.png"
+    if os.path.exists(template_path) and time.time()-os.path.getmtime(template_path) < 600:
+        banner = Image.open(template_path).convert("RGB")
     else:
-        try:
-            right = await arequests.get(logo_url, timeout = 5)
-
-            if right.status_code == 200:
-                logo = right.content
-                del right
-                if len(logo) / (1024 * 1024) > 10:
-                    raise MemoryError("Logo too large. Aborted.")
-                logo_org = Image.open(BytesIO(logo))
-                logobbox = logo_org.getbbox()
-                if logobbox[3] - logobbox[1] > 3400 or logobbox[2] - logobbox[0] > 3400:
-                    raise MemoryError("Logo too large. Aborted.")
-
-                logo = logo_org.resize((200, 200), resample=Image.Resampling.LANCZOS).convert("RGBA")
-                logo.save(f"/tmp/hub/logo/{company_abbr}.png", optimize = True, quality=100)
-
-                custom_bg = False
-                try:
-                    bg = await arequests.get(bg_url, timeout = 5)
-                    if bg.status_code == 200:
-                        bg = bg.content
-                        if len(bg) / (1024 * 1024) > 10:
-                            raise MemoryError("Background too large. Aborted.")
-                        bg = Image.open(BytesIO(bg))
-                        bgbbox = bg.getbbox()
-                        if bgbbox[3] - bgbbox[1] > 3400 or bgbbox[2] - bgbbox[0] > 3400:
-                            raise MemoryError("Background too large. Aborted.")
-
-                        # resize and crop
-                        aspect_ratio = bg.height / bg.width
-                        new_height = int(1700 * aspect_ratio)
-                        bg = bg.resize((1700, new_height), resample=Image.Resampling.LANCZOS)
-                        top = (new_height - 300) // 2
-                        bottom = top + 300
-                        banner = bg.crop((0, top, 1700, bottom))
-                        banner = banner.convert("RGBA")
-
-                        # 85% transparent on a white background
-                        white_bg = Image.new("RGBA", banner.size, (255, 255, 255, 255))
-                        banner_array = Image.new("RGBA", banner.size, (0, 0, 0, 0))
-                        banner_array.paste(banner, (0, 0))
-                        banner_data = banner_array.getdata()
-                        new_data = [(r, g, b, int(a * bg_opacity)) for r, g, b, a in banner_data]
-                        banner_array.putdata(new_data)
-                        banner = Image.alpha_composite(white_bg, banner_array)
-
-                        del bg, white_bg, banner_array, new_data
-                        custom_bg = True
-                except:
-                    pass
-
-                if not custom_bg:
-                    if logobbox[3] - logobbox[1] > 1700 or logobbox[2] - logobbox[0] > 1700:
-                        logo_large = logo_org.resize((1700, 1700), resample=Image.Resampling.LANCZOS).convert("RGBA")
-                    else:
-                        logo_large = logo_org.convert("RGBA")
-
-                    logo_large_org_datas = logo_large.getdata()
-                    logo_large_datas = []
-                    for item in logo_large_org_datas:
-                        if item[3] == 0:
-                            logo_large_datas.append((255,255,255))
-                        else:
-                            logo_large_datas.append((int((1-bg_opacity)*255+bg_opacity*item[3]/255*item[0]), \
-                                int((1-bg_opacity)*255+bg_opacity*item[3]/255*item[1]), \
-                                int((1-bg_opacity)*255+bg_opacity*item[3]/255*item[2])))
-                        # use 85% transparent logo for background (with white background)
-                    logo_large.putdata(logo_large_datas)
-                    logo_large = logo_large.resize((1700, 1700), resample=Image.Resampling.LANCZOS).convert("RGB")
-
-                    banner = logo_large.crop((0, 700, 1700, 1000))
-                    del logo_large, logo_large_org_datas, logo_large_datas
-
-                # render logo
-                logo_datas = logo.getdata()
-                logo_bg = banner.crop((1475, 25, 1675, 225))
-                datas = list(logo_bg.getdata())
-                for i in range(0,200):
-                    for j in range(0,200):
-                        # paste logo
-                        if logo_datas[i*200+j][3] == 255:
-                            datas[i*200+j] = logo_datas[i*200+j]
-                        elif logo_datas[i*200+j][3] != 0:
-                            bg_a = 1 - logo_datas[i*200+j][3] / 255
-                            fg_a = logo_datas[i*200+j][3] / 255
-                            bg = datas[i*200+j]
-                            fg = logo_datas[i*200+j]
-                            datas[i*200+j] = (int(bg[0]*bg_a+fg[0]*fg_a), int(bg[1]*bg_a+fg[1]*fg_a), int(bg[2]*bg_a+fg[2]*fg_a))
-                logo_bg.putdata(datas)
-                banner.paste(logo_bg, (1475, 25, 1675, 225))
-                del logo_org, logo_bg, logo_datas, datas
-
-        except:
-            logo = Image.new("RGBA", (200,200),(255,255,255))
-            banner = Image.new("RGB", (1700,300),(255,255,255))
+        async def load_asset(url):
+            if not url:
+                return None
+            try:
+                result = await arequests.get(url, timeout=5)
+                if result.status_code != 200 or len(result.content) > 10*1024*1024:
+                    return None
+                loaded = Image.open(BytesIO(result.content))
+                if loaded.width * loaded.height > 20_000_000 or max(loaded.size) > 16384:
+                    return None
+                return loaded.convert("RGBA")
+            except Exception:
+                return None
+        logo, background = await asyncio.gather(load_asset(logo_url), load_asset(bg_url))
+        banner = compose_background(background, logo, bg_opacity)
 
         # draw company name
         draw = ImageDraw.Draw(banner)
@@ -277,7 +197,7 @@ async def get_banner(request: Request, response: Response):
         del draw, usH40
 
         banner = banner.convert("RGB")
-        banner.save(f"/tmp/hub/template/{company_abbr}_{language}_cjk{int(use_cjk)}.png", optimize = True, quality=100)
+        banner.save(template_path, optimize=True)
 
     avatar = data["avatar"]
     avatarh = hashlib.sha256(avatar.encode()).hexdigest()[:16]
@@ -483,7 +403,7 @@ async def get_banner(request: Request, response: Response):
     output = BytesIO()
     banner.save(output, "jpeg", optimize = True, quality=95)
     del banner, logo, avatar, draw
-    open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}.png","wb").write(output.getvalue())
+    open(f"/tmp/hub/banner/{company_abbr}_{userid}_{language}_{banner_key}.png","wb").write(output.getvalue())
 
     response = StreamingResponse(iter([output.getvalue()]), media_type="image/jpeg")
     del output

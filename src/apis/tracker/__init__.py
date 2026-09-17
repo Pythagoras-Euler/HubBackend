@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 
 import apis.tracker.tracksim as tracksim
 import apis.tracker.trucky as trucky
+import apis.tracker.truckershub as truckershub
 import apis.tracker.trucky_history as trucky_history
 import apis.tracker.trucky_roles as trucky_roles
 import apis.tracker.custom as custom
@@ -22,6 +23,8 @@ routes_tracksim_route = [
 ]
 
 routes_trucky = [
+    APIRoute("/truckershub/routes/settings", truckershub.get_settings, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/truckershub/routes/settings", truckershub.put_settings, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings", trucky_roles.get_mappings, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings/{companyid}/{roleid}", trucky_roles.put_mapping, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/trucky/active", trucky_history.get_active_jobs, methods=["GET"], response_class=JSONResponse),

@@ -217,11 +217,6 @@ async def get_banner(request: Request, response: Response,
     language = language or await GetUserLanguage(request, uid)
     language = "zh" if str(language).startswith("zh") else language if language in ("en", "de", "es") else "en"
 
-    if os.path.exists(f"/tmp/hub/banner/{app.config.abbr}_{userid}_{language}.png"):
-        if time.time() - os.path.getmtime(f"/tmp/hub/banner/{app.config.abbr}_{userid}_{language}.png") <= 600:
-            response = StreamingResponse(iter([open(f"/tmp/hub/banner/{app.config.abbr}_{userid}_{language}.png","rb").read()]), media_type="image/jpeg")
-            return response
-
     rl = await ratelimit(request, 'GET /member/banner', 10, 5)
     if rl[0]:
         return rl[1]
@@ -256,9 +251,9 @@ async def get_banner(request: Request, response: Response,
             first_row = "division"
 
     if rank_name is None:
-        rank_name = "N/A"
+        rank_name = "-*-*-"
     if division_name is None:
-        division_name = "N/A"
+        division_name = "-*-*-"
 
     distance = 0
     await app.db.execute(dhrid, f"SELECT SUM(distance) FROM dlog WHERE userid = {userid}")
@@ -291,7 +286,7 @@ async def get_banner(request: Request, response: Response,
             "userid": userid, "language": language, "joined": joined, "highest_role": highest_role, \
             "avatar": avatar, "name": name, "first_row": first_row, \
             "rank": rank_name, "division": division_name, "distance": distance, "profit": profit}), \
-            headers = {"Content-Type": "application/json"}, timeout = 5)
+            headers = {"Content-Type": "application/json"}, timeout = 15)
         if r.status_code // 100 != 2:
             response.status_code = 503
             return {"error": ml.tr(request, "banner_service_unavailable")}
