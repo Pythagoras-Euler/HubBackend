@@ -23,6 +23,7 @@ routes_tracksim_route = [
 ]
 
 routes_trucky = [
+    APIRoute("/truckershub/update", truckershub.post_update, methods=["POST"], response_class=JSONResponse),
     APIRoute("/truckershub/routes/settings", truckershub.get_settings, methods=["GET"], response_class=JSONResponse),
     APIRoute("/truckershub/routes/settings", truckershub.put_settings, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings", trucky_roles.get_mappings, methods=["GET"], response_class=JSONResponse),

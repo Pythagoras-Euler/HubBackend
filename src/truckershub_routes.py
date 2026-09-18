@@ -69,3 +69,18 @@ def encode_route(game, points):
     game_id = 1 if game in ('eut2', 'ets2') else 2
     # Version 1 stores absolute x,y,z and is supported by the existing detail API.
     return f'{game_id},,v1;' + ';'.join(f'{x},0,{z}' for x, z in points)
+
+
+def api_payload(payload):
+    """Accept raw API objects and the provider's JSON response envelope."""
+    if isinstance(payload, dict):
+        if payload.get('error') or payload.get('success') is False:
+            raise ValueError('TruckersHub API rejected the request')
+        if 'data' in payload and isinstance(payload['data'], (dict, list)):
+            return payload['data']
+    return payload
+
+
+def webhook_token(key):
+    import hmac
+    return hmac.new(key.encode(), b'drivershub:truckershub:route-webhook:v1', 'sha256').hexdigest()

@@ -211,7 +211,7 @@ class HubMiddleware(BaseHTTPMiddleware):
                 err = traceback.format_exc()
                 await tracebackHandler(request, exc, err)
 
-        if request.method != "GET" and real_path.split("/")[1] not in ["tracksim", "trucky", "custom-tracker", "unitracker"]:
+        if request.method != "GET" and real_path.split("/")[1] not in ["tracksim", "trucky", "truckershub", "custom-tracker", "unitracker"]:
             if "content-type" in request.headers.keys():
                 if request.headers["content-type"] != "application/json":
                     return JSONResponse({"error": "Content-Type must be application/json"}, status_code=400)

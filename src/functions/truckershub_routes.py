@@ -5,7 +5,7 @@ import json
 import time
 from functions.arequests import arequests
 from functions.dataop import compress, decompress
-from truckershub_routes import same_delivery, route_points, encode_route, timestamp
+from truckershub_routes import same_delivery, route_points, encode_route, timestamp, api_payload
 
 
 async def api_get(app, rid, key, path):
@@ -13,7 +13,7 @@ async def api_get(app, rid, key, path):
                                   headers={'Authorization': key, 'Accept': 'application/json'}, dhrid=rid, timeout=20)
     if response.status_code != 200:
         raise RuntimeError(f'TruckersHub HTTP {response.status_code}')
-    return response.json()
+    return api_payload(response.json())
 
 
 async def get_key(app, rid):
