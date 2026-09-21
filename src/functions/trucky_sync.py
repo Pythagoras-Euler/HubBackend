@@ -150,15 +150,4 @@ async def sync_loop(app):
                             lock.release()
             except Exception as exc:
                 logger.warning('Trucky reconciliation worker: %s', exc)
-        from functions.truckershub_routes import sync_routes
-        route_rid = genrid()
-        route_request = Request(scope={"type": "http", "app": app, "headers": [], "mocked": True})
-        route_request.state.dhrid = route_rid
-        try:
-            await app.db.new_conn(route_rid, db_name=app.config.db_name)
-            await sync_routes(route_request)
-        except Exception as exc:
-            logger.warning('TruckersHub route worker: %s', type(exc).__name__)
-        finally:
-            await app.db.close_conn(route_rid)
         await asyncio.sleep(90)

@@ -714,7 +714,7 @@ async def process_economy(request, userid, logid, data, driven_distance, revenue
         from api import tracebackHandler
         await tracebackHandler(request, exc, traceback.format_exc())
 
-TRACKER_MAP = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5}
+TRACKER_MAP = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5, "truckershub": 6}
 
 def get_job_timestamp(data, tracker):
     """Use the normalized source completion time for every tracker and import."""
@@ -745,7 +745,7 @@ def get_external_driver_info(converted_data):
         "discordid": None,
         "steamid": str(steamid) if steamid is not None else None,
         "truckersmpid": None,
-        "tracker": "trucky",
+        "tracker": converted_data.get("data", {}).get("object", {}).get("provider", "trucky"),
         "avatar": driver.get("profile_photo_url"),
         "bio": None,
         "note": "",
@@ -758,7 +758,15 @@ def get_external_driver_info(converted_data):
     }
 
 
-async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False, allow_external_driver = False, historical = False):
+async def handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check=False, allow_external_driver=False, historical=False):
+    if tracker in ('trucky','truckershub'):
+        from functions.tracker_sources import ingest
+        return await ingest(request, original_data, converted_data, tracker, _handle_new_job,
+                            bypass_tracker_check=bypass_tracker_check, allow_external_driver=allow_external_driver, historical=historical)
+    return await _handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check, allow_external_driver, historical)
+
+
+async def _handle_new_job(request, original_data, converted_data, tracker, bypass_tracker_check = False, allow_external_driver = False, historical = False):
     (app, dhrid) = (request.app, request.state.dhrid)
     await app.db.extend_conn(dhrid, 10)
     data = converted_data["data"]["object"]
@@ -801,7 +809,7 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
         return (409, "Already logged.")
 
     driven_distance = float(data["driven_distance"])
-    top_speed = round(data["truck"]["top_speed"] * 3.6, 2) # m/s => km/h
+    top_speed = round((data["truck"]["top_speed"] or 0) * 3.6, 2) # m/s => km/h
     fuel_used = data["fuel_used"]
     game = data["game"]["short_name"]
     gameid = 1 if game.startswith("e") else 2 # 1: euro, 2: dollar
@@ -922,8 +930,11 @@ async def handle_new_job(request, original_data, converted_data, tracker, bypass
         cargo_mass = 0
         if data["cargo"] is not None:
             cargo_name = data["cargo"]["name"]
-            cargo_mass = min(data["cargo"]["mass"], 2147483647)
+            cargo_mass = min(data["cargo"]["mass"] or 0, 2147483647)
         await app.db.execute(dhrid, f"INSERT INTO dlog_meta(logid, source_city, source_company, destination_city, destination_company, cargo_name, cargo_mass) VALUES ({logid}, '{convertQuotation(source_city)}', '{convertQuotation(source_company)}', '{convertQuotation(destination_city)}', '{convertQuotation(destination_company)}', '{convertQuotation(cargo_name)}', {cargo_mass})")
+        if tracker in ('trucky','truckershub'):
+            from functions.tracker_sources import save_source
+            await save_source(app,dhrid,tracker,logid_tracker,logid,payload=compress(json.dumps(original_data)))
         await app.db.commit(dhrid)
 
         if not external_driver and not historical:

@@ -5,6 +5,7 @@ from fastapi import Header, Request, Response
 
 from functions import auth, ratelimit
 from functions.trucky_sync import driver_totals
+from truckershub_import import merge_active
 
 
 async def get_drivers(request: Request, response: Response, authorization: str = Header(None),
@@ -19,7 +20,7 @@ async def get_drivers(request: Request, response: Response, authorization: str =
         if au['error']:
             response.status_code = au.pop('code')
             return au
-    conditions = ['tracker_type=3', 'logid>=0']
+    conditions = ['tracker_type IN (3,6)', 'logid>=0']
     if after is not None:
         conditions.append(f'timestamp>={after}')
     if before is not None:
@@ -62,5 +63,10 @@ async def get_active_jobs(request: Request, response: Response, authorization: s
             continue
         snapshot = json.loads(raw)
         for item in snapshot['list']:
-            jobs[item['trackerid']] = {**item, 'stale': time.time()-snapshot['updated_at'] > 300}
-    return {'list': sorted(jobs.values(), key=lambda j: j.get('start_time') or '', reverse=True)}
+            jobs['trucky:'+str(item['trackerid'])] = {**item, 'tracker':'trucky', 'stale': time.time()-snapshot['updated_at'] > 300}
+    raw=app.redis.get('truckershub-active')
+    if raw:
+        snapshot=json.loads(raw)
+        for item in snapshot.get('list',[]):
+            jobs['truckershub:'+str(item['trackerid'])]={**item,'tracker':'truckershub','stale':time.time()-snapshot['updated_at']>300}
+    return {'list': sorted(merge_active(jobs.values()), key=lambda j: j.get('start_time') or '', reverse=True)}

@@ -256,6 +256,8 @@ def init(config, version):
                 f"Resolve duplicates before restarting backend-init."
             ) from exc
 
+    from tracker_schema import prepare as prepare_tracker_schema
+    prepare_tracker_schema(cur)
     from public_id_migration import prepare
     prepare(cur, public_ids)
     conn.commit()

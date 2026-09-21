@@ -43,6 +43,8 @@ async def post_accept(request: Request, response: Response, uid: int, authorizat
                 tracker_in_use = 4
             elif tracker_in_use == "unitracker":
                 tracker_in_use = 5
+            elif tracker_in_use == "truckershub":
+                tracker_in_use = 6
             else:
                 response.status_code = 400
                 return {"error": ml.tr(request, "invalid_value", var = {"key": "tracker"}, force_lang = au["language"])}
@@ -58,6 +60,8 @@ async def post_accept(request: Request, response: Response, uid: int, authorizat
                     tracker_in_use = 4
                 elif app.config.trackers[0]["type"] == "unitracker":
                     tracker_in_use = 5
+                elif app.config.trackers[0]["type"] == "truckershub":
+                    tracker_in_use = 6
             else:
                 # A Hub can be used without TrackSim/Trucky/etc.  In that case a
                 # newly accepted member simply has no delivery tracker selected.

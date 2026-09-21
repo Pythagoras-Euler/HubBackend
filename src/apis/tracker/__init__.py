@@ -23,7 +23,12 @@ routes_tracksim_route = [
 ]
 
 routes_trucky = [
+    APIRoute("/deliveries/active", trucky_history.get_active_jobs, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/deliveries/drivers", trucky_history.get_drivers, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/truckershub/retry", truckershub.post_retry, methods=["POST"], response_class=JSONResponse),
     APIRoute("/truckershub/update", truckershub.post_update, methods=["POST"], response_class=JSONResponse),
+    APIRoute("/truckershub/settings", truckershub.get_settings, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/truckershub/settings", truckershub.put_settings, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/truckershub/routes/settings", truckershub.get_settings, methods=["GET"], response_class=JSONResponse),
     APIRoute("/truckershub/routes/settings", truckershub.put_settings, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings", trucky_roles.get_mappings, methods=["GET"], response_class=JSONResponse),

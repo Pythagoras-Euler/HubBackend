@@ -582,6 +582,8 @@ async def post_tracker_switch(request: Request, response: Response, uid: Optiona
             tracker_in_use = 4
         elif tracker_in_use == "unitracker":
             tracker_in_use = 5
+        elif tracker_in_use == "truckershub":
+            tracker_in_use = 6
         else:
             response.status_code = 400
             return {"error": ml.tr(request, "invalid_value", var = {"key": "tracker"}, force_lang = au["language"])}

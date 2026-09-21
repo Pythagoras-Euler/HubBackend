@@ -378,6 +378,8 @@ async def GetUserInfo(request, userid = -1, discordid = -1, uid = -1, privacy = 
         tracker = "custom"
     elif p[0][12] == 5:
         tracker = "unitracker"
+    elif p[0][12] == 6:
+        tracker = "truckershub"
 
     ret = {"uid": uid, "userid": p[0][1], "name": p[0][2], "email": p[0][3], "discordid": nstr(p[0][7]), "steamid": nstr(p[0][8]), "truckersmpid": p[0][9], "tracker": tracker, "avatar": p[0][4], "bio": b64d(p[0][5]), "note": "", "global_note": global_note, "roles": roles, "activity": activity, "mfa": mfa_enabled, "join_timestamp": p[0][11]}
 

@@ -1299,7 +1299,7 @@ def validateConfig(cfg):
             continue
         if "ip_whitelist" not in tracker.keys():
             tracker["ip_whitelist"] = []
-        if tracker["type"] not in ["tracksim", "trucky", "custom", "unitracker"]:
+        if tracker["type"] not in ["tracksim", "trucky", "custom", "unitracker", "truckershub"]:
             continue
         if tracker["ip_whitelist"] is not None and type(tracker["ip_whitelist"]) != list:
             continue

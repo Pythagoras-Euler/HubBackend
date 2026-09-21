@@ -8,7 +8,7 @@ def active_job(data):
     driver = data.get("driver") or {}
     return {
         "trackerid": int(data["id"]), "status": "in_progress",
-        "driver": driver.get("name"),
+        "driver": driver.get("name"), "steamid": str((driver.get("steam_profile") or {}).get("steam_id") or ""),
         "source": {"city": data.get("source_city_name"), "company": data.get("source_company_name")},
         "destination": {"city": data.get("destination_city_name"), "company": data.get("destination_company_name")},
         "cargo": data.get("cargo_name"), "distance": data.get("real_driven_distance_km") or data.get("driven_distance_km"),

@@ -81,7 +81,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
         if app.config.privacy and authorization is None:
             response.status_code = 401
             return {"error": "Authentication required."}
-        await app.db.execute(dhrid, "SELECT logid,data FROM dlog WHERE tracker_type=3 AND logid>=0")
+        await app.db.execute(dhrid, "SELECT logid,data FROM dlog WHERE tracker_type IN (3,6) AND logid>=0")
         matching = []
         for lid, raw in await app.db.fetchall(dhrid):
             obj = json.loads(decompress(raw))["data"]["object"]
@@ -298,6 +298,8 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
         tracker = "custom"
     elif tracker_type == 5:
         tracker = "unitracker"
+    elif tracker_type == 6:
+        tracker = "truckershub"
 
     await app.db.execute(dhrid, f"SELECT data FROM telemetry WHERE logid = {logid}")
     p = await app.db.fetchall(dhrid)
@@ -361,7 +363,9 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
         if "is_deleted" in userinfo:
             userinfo = await GetUserInfo(request, -1)
 
-    return {"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
+    await app.db.execute(dhrid,"SELECT provider,sourceid FROM delivery_source WHERE logid=%s AND state='linked' ORDER BY provider",(logid,))
+    sources=[{'tracker':provider,'trackerid':sid} for provider,sid in await app.db.fetchall(dhrid)]
+    return {"sources":sources,"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
         "distance": distance, "division": division, "challenge": challenge, \
             "timestamp": t[0][2], "views": view_count, \
             "detail": data, "telemetry": telemetry}

@@ -1,4 +1,4 @@
-import ast, hmac, time, sys
+import ast, hmac, time, sys, hashlib, json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -9,11 +9,14 @@ source=Path(__file__).resolve().parents[1]/'src/apis/tracker/truckershub.py'
 nodes=[n for n in ast.parse(source.read_text()).body if isinstance(n,ast.AsyncFunctionDef)]
 class SettingsTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.ns=dict(hmac=hmac,time=time,webhook_token=webhook_token,Header=lambda _:None,Request=object,Response=object,authorize=AsyncMock(return_value=None),get_key=AsyncMock(return_value='private-test-token'),api_get=AsyncMock())
+        self.ns=dict(hashlib=hashlib,json=json,compress=lambda x:x,decompress=lambda x:x,hmac=hmac,time=time,webhook_token=webhook_token,Header=lambda _:None,Request=object,Response=object,authorize=AsyncMock(return_value=None),get_key=AsyncMock(return_value='private-test-token'),api_get=AsyncMock())
         exec(compile(ast.Module(body=nodes,type_ignores=[]),str(source),'exec'),self.ns)
-        self.db=SimpleNamespace(execute=AsyncMock(),commit=AsyncMock(),new_conn=AsyncMock())
+        self.db=SimpleNamespace(execute=AsyncMock(),commit=AsyncMock(),new_conn=AsyncMock(),fetchall=AsyncMock(return_value=[]))
         self.request=SimpleNamespace(app=SimpleNamespace(config=SimpleNamespace(db_name='test'),db=self.db,redis=SimpleNamespace(hgetall=lambda _:{})),state=SimpleNamespace(dhrid='test'),json=AsyncMock())
         self.response=SimpleNamespace(status_code=200)
+        async def stream():
+            yield b'{"type":"test"}'
+        self.request.stream=stream
     async def test_settings_never_return_token(self):
         data=await self.ns['get_settings'](self.request,self.response,'test')
         self.assertTrue(data['configured']); self.assertEqual(data['sync'],{})
@@ -41,9 +44,9 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.response.status_code, 200)
             self.assertEqual(result, {'received': True})
         self.assertEqual(self.db.new_conn.await_count, 2)
-        redis.delete.assert_called_once_with('truckershub-route-cooldown')
+        self.assertEqual(self.db.commit.await_count,2)
         self.request.json.assert_not_awaited()
-        self.db.execute.assert_not_awaited()
+        self.assertTrue(all('INSERT IGNORE INTO tracker_inbox' in call.args[1] for call in self.db.execute.call_args_list))
     def test_api_envelopes_and_errors(self):
         for data in ({'id': 7}, [{'jobID': 9}], [{'position': {'X': 1,'Z': 2}}]):
             self.assertEqual(api_payload(data),data)

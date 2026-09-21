@@ -16,7 +16,7 @@ for argv in sys.argv:
         version += ".dev"
 
 abspath = os.path.dirname(os.path.abspath(inspect.getframeinfo(inspect.currentframe()).filename))
-TRACKER = {"tracksim": "TrackSim", "trucky": "Trucky", "custom": "Custom", "unitracker": "UniTracker"}
+TRACKER = {"tracksim": "TrackSim", "trucky": "Trucky", "custom": "Custom", "unitracker": "UniTracker", "truckershub": "TruckersHub"}
 
 os_info = f"{platform.system()} {platform.release()}"
 py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
