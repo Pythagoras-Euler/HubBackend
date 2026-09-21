@@ -1,3 +1,4 @@
+import apis.tracker.active as active
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
@@ -23,7 +24,8 @@ routes_tracksim_route = [
 ]
 
 routes_trucky = [
-    APIRoute("/deliveries/active", trucky_history.get_active_jobs, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/deliveries/active/{provider}/{sourceid}/abandon", active.abandon, methods=["POST"], response_class=JSONResponse),
+    APIRoute("/deliveries/active", active.get_jobs, methods=["GET"], response_class=JSONResponse),
     APIRoute("/deliveries/drivers", trucky_history.get_drivers, methods=["GET"], response_class=JSONResponse),
     APIRoute("/truckershub/retry", truckershub.post_retry, methods=["POST"], response_class=JSONResponse),
     APIRoute("/truckershub/update", truckershub.post_update, methods=["POST"], response_class=JSONResponse),
@@ -33,7 +35,7 @@ routes_trucky = [
     APIRoute("/truckershub/routes/settings", truckershub.put_settings, methods=["PUT"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings", trucky_roles.get_mappings, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/role-mappings/{companyid}/{roleid}", trucky_roles.put_mapping, methods=["PUT"], response_class=JSONResponse),
-    APIRoute("/trucky/active", trucky_history.get_active_jobs, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/trucky/active", active.get_jobs, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/drivers", trucky_history.get_drivers, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/sync-status", trucky_history.get_sync_status, methods=["GET"], response_class=JSONResponse),
     APIRoute("/trucky/update", trucky.post_update, methods=["POST"], response_class=JSONResponse),

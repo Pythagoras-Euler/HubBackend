@@ -238,6 +238,9 @@ async def patch_config(request: Request, response: Response, authorization: str 
 
     for tt in new_config.keys():
         if tt in config_whitelist:
+            if tt == "active_delivery_timeout_days" and (type(new_config[tt]) is not int or not 1 <= new_config[tt] <= 365):
+                response.status_code = 422
+                return {'error': 'Timeout must be an integer from 1 to 365 days'}
             if tt == "trackers":
                 idx = 0
                 for tracker in new_config[tt]:

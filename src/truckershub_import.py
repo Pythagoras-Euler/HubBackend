@@ -145,6 +145,7 @@ def active_job(job):
     driver = obj(job.get('driver'))
     real = obj(job.get('realtime'))
     return {'tracker':'truckershub','trackerid':str(job.get('jobID') or driver.get('steamID') or ''),
+            'game':{'ets2':'eut2','eut2':'eut2','ats':'ats'}.get(obj(job.get('game')).get('id')),
             'status':'in_progress','driver':driver.get('username'), 'steamid':str(driver.get('steamID') or ''),
             'source':{k:obj(obj(job.get('source')).get(k)).get('name') for k in ('city','company')},
             'destination':{k:obj(obj(job.get('destination')).get(k)).get('name') for k in ('city','company')},

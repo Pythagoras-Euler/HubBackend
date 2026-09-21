@@ -23,7 +23,7 @@ async def attach_route(app, rid, key, sid, lid):
         return
     points=route_points(await api_get(app,rid,key,f'routes/{sid}'))
     if len(points)<2:
-        return
+        return False
     game=json.loads(decompress(row[0]))['data']['object']['game']['short_name']
     await app.db.execute(rid,'SELECT logid FROM dlog WHERE logid=%s FOR UPDATE',(lid,))
     if not await app.db.fetchone(rid):
@@ -34,6 +34,7 @@ async def attach_route(app, rid, key, sid, lid):
         await app.db.execute(rid,'INSERT INTO telemetry(logid,uuid,userid,data) SELECT logid,%s,userid,%s FROM dlog WHERE logid=%s',
                              (f'truckershub:{sid}',compress(encode_route(game,points)),lid))
     await app.db.commit(rid)
+    return True
 
 
 async def import_job(request, raw):
@@ -144,9 +145,11 @@ async def reconcile(request):
         for sid,lid in await app.db.fetchall(rid):
             if time.monotonic()-started>220 or not lock.owned(): break
             try:
-                await attach_route(app,rid,key,sid,lid)
-            except Exception:
+                attached = await attach_route(app,rid,key,sid,lid)
+                app.redis.set(f'truckershub-route:{sid}', 'available' if attached else 'missing', ex=3600)
+            except Exception as exc:
                 await app.db.execute(rid,'ROLLBACK')
+                app.redis.set(f'truckershub-route:{sid}', 'restricted' if isinstance(exc,RuntimeError) and str(exc)=='TruckersHub HTTP 403' else 'unavailable', ex=3600)
             await app.db.execute(rid,"UPDATE delivery_source SET route_retry_at=%s WHERE provider='truckershub' AND sourceid=%s",(now+900,sid))
             await app.db.commit(rid)
             await asyncio.sleep(1.1)

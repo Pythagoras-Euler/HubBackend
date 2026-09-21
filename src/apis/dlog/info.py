@@ -365,7 +365,14 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
 
     await app.db.execute(dhrid,"SELECT provider,sourceid FROM delivery_source WHERE logid=%s AND state='linked' ORDER BY provider",(logid,))
     sources=[{'tracker':provider,'trackerid':sid} for provider,sid in await app.db.fetchall(dhrid)]
-    return {"sources":sources,"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
+    route_status = 'available' if telemetry else 'missing'
+    if not telemetry:
+        th_source = next((s['trackerid'] for s in sources if s['tracker']=='truckershub'), trackerid if tracker=='truckershub' else None)
+        if 'route' not in app.config.plugins: route_status = 'disabled'
+        elif th_source is not None: route_status = app.redis.get(f'truckershub-route:{th_source}') or 'pending'
+        elif tracker=='tracksim': route_status = 'pending'
+        elif tracker=='trucky': route_status = 'unsupported'
+    return {"route_status":route_status,"sources":sources,"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \
         "distance": distance, "division": division, "challenge": challenge, \
             "timestamp": t[0][2], "views": view_count, \
             "detail": data, "telemetry": telemetry}

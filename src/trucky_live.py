@@ -7,6 +7,7 @@ def active_job(data):
         return None
     driver = data.get("driver") or {}
     return {
+        "game": {"ETS2":"eut2","ATS":"ats"}.get((data.get("game") or {}).get("code")), "cargo_id": data.get("cargo_id"),
         "trackerid": int(data["id"]), "status": "in_progress",
         "driver": driver.get("name"), "steamid": str((driver.get("steam_profile") or {}).get("steam_id") or ""),
         "source": {"city": data.get("source_city_name"), "company": data.get("source_company_name")},

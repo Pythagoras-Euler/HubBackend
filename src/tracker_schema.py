@@ -1,5 +1,12 @@
 """Additive tracker import schema; no historical deliveries are rewritten."""
 STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS active_delivery (
+        provider VARCHAR(32) NOT NULL, sourceid BIGINT NOT NULL, steamid VARCHAR(20) NOT NULL,
+        status VARCHAR(24) NOT NULL, payload MEDIUMTEXT NOT NULL,
+        first_seen BIGINT NOT NULL, updated_at BIGINT NOT NULL, closed_at BIGINT NULL,
+        closed_by INT NULL, matched_logid INT NULL,
+        PRIMARY KEY(provider,sourceid), KEY(steamid,status)
+    ) ENGINE=InnoDB""",
     """CREATE TABLE IF NOT EXISTS delivery_source (
         provider VARCHAR(32) NOT NULL, sourceid BIGINT NOT NULL, logid INT NULL,
         state VARCHAR(24) NOT NULL DEFAULT 'pending', payload MEDIUMTEXT NULL,
