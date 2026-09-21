@@ -8,12 +8,14 @@ from functions.dataop import compress, decompress
 from truckershub_routes import same_delivery, route_points, encode_route, timestamp, api_payload
 
 
-async def api_get(app, rid, key, path):
+async def api_get(app, rid, key, path, include_links=False):
     response = await arequests.get(app, 'https://api.truckershub.in/v1/' + path,
                                   headers={'Authorization': key, 'Accept': 'application/json'}, dhrid=rid, timeout=20)
     if response.status_code != 200:
         raise RuntimeError(f'TruckersHub HTTP {response.status_code}')
-    return api_payload(response.json())
+    raw = response.json()
+    payload = api_payload(raw)
+    return raw if include_links else payload
 
 
 async def get_key(app, rid):

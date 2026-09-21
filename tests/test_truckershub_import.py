@@ -66,3 +66,31 @@ class ActiveMergeTests(unittest.TestCase):
         raw=fixture();raw['realtime']['end']=None
         th=active_job(raw);other=copy.deepcopy(th);other.update(tracker='trucky',steamid='')
         self.assertEqual(len(merge_active([th,other])),2)
+
+class RealPayloadTests(unittest.TestCase):
+    def test_millisecond_terminal_times_and_job_status(self):
+        raw=fixture();raw['jobStatus']='Completed'
+        raw['realtime']={'start':1756720800000,'end':1756724400123,'timeTaken':3600123}
+        value=convert_job(raw)['data']['object']
+        self.assertEqual(job_status(raw),'completed')
+        self.assertEqual(value['start_time'],'2025-09-01T10:00:00+00:00')
+        self.assertAlmostEqual(value['time_spent'],3600.123,places=3)
+        self.assertIsNone(active_job(raw))
+    def test_seconds_and_numeric_strings(self):
+        raw=fixture();raw['realtime']={'start':'1756720800000','end':1756724400}
+        self.assertEqual(convert_job(raw)['data']['object']['time_spent'],3600)
+    def test_invalid_numeric_times_are_not_completed_jobs(self):
+        for value in (True,0,-1,float('nan'),float('inf'),10**30):
+            raw=fixture();raw['realtime']['end']=value
+            with self.assertRaises(ValueError):convert_job(raw)
+    def test_completed_without_end_fails_instead_of_showing_active(self):
+        raw=fixture();raw['jobStatus']='Completed';raw['realtime']['end']=None
+        self.assertIsNone(active_job(raw))
+        with self.assertRaises(ValueError):convert_job(raw)
+    def test_flat_paid_events_are_retained(self):
+        raw=fixture();raw['events']=[{'type':'refuel-paid','amount':100,'time':1756720900000}, {'type':'fine','amount':200,'offence':'speeding_camera','time':1756721000000}]
+        events=convert_job(raw)['data']['object']['events']
+        self.assertEqual(events[1]['type'],'refuel')
+        self.assertEqual(events[2]['meta']['amount'],200)
+        self.assertIsNone(events[2]['meta']['speed'])
+        self.assertTrue(events[1]['real_time'].startswith('2025-09-01'))

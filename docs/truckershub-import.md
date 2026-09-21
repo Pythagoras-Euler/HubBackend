@@ -51,9 +51,22 @@ Tests cover conversion, webhook authorization and durable receipt, worker
 retries, source deduplication and user tracker selection. The isolated MariaDB
 integration script exercises the real delivery writer with disposable tables,
 including concurrent retries and deleted-job protection. Browser fixtures cover
-admin retry and live cards. No real TruckersHub company import was performed:
-the operator has no API token and explicitly deferred that validation.
+admin retry and live cards.
 
-Provider contract: https://docs.truckershub.in/ . Real payload compatibility,
-rate limits and company-specific subscription access remain to be confirmed
-when a token becomes available.
+Live validation on 2026-09-21 imported all four company jobs with four distinct
+Public IDs and no failures or review items. All four public detail endpoints
+returned terminal times and vehicle information. Real API timestamps are Unix
+milliseconds and terminal status is `jobStatus`; both are normalized, along
+with flat event fields. Monthly API pagination is followed using only validated
+page numbers, never by forwarding credentials to a returned URL. Two identical
+signed test webhook requests both returned HTTP 200 and produced one receipt.
+
+For this company, the live endpoint returned HTTP 403 with an insufficient
+Boosts message; the routes endpoint also returned HTTP 403. These permissions
+do not prevent history import. This validates the Hub receiver, not delivery
+from the provider's own webhook test button. A restart during an import can
+leave its five-minute Redis lease until expiry; the next worker resumes after
+that lease instead of overlapping the old import.
+
+Provider contract: https://docs.truckershub.in/ . Other payload variants and
+company-specific subscription access can still differ.

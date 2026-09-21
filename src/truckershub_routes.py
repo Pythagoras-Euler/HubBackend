@@ -4,6 +4,16 @@ import math
 
 
 def timestamp(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().isascii() and value.strip().isdigit()):
+        try:
+            stamp = float(value)
+            if stamp >= 100_000_000_000:
+                stamp /= 1000  # TruckersHub realtime and event timestamps use milliseconds.
+            return stamp if math.isfinite(stamp) and 0 < stamp < 253402300800 else None
+        except (ValueError, OverflowError):
+            return None
     if not isinstance(value, str) or not value:
         return None
     try:

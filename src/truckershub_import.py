@@ -37,12 +37,14 @@ def event_type(value):
 
 
 def job_status(job):
-    status = event_type(job.get('status', ''))
+    status = event_type(job.get('jobStatus') or job.get('status', ''))
     types = [event_type(obj(e).get('type')) for e in job.get('events', []) if isinstance(e, dict)]
     if status in ('cancelled','canceled','jobcancelled','jobcanceled') or any(t in ('jobcancelled','jobcanceled') for t in types):
         return 'cancelled'
     if status in ('inprogress','started','active'):
         return 'in_progress'
+    if status in ('completed', 'delivered', 'jobdelivered'):
+        return 'completed'
     if iso(obj(job.get('realtime')).get('end')):
         return 'completed'
     return 'in_progress'
@@ -95,7 +97,7 @@ def convert_job(job):
     penalty = number(job.get('penalty'))
     for raw in job.get('events', []):
         raw = obj(raw)
-        kind, detail = event_type(raw.get('type')), obj(raw.get('details') or raw.get('meta'))
+        kind, detail = event_type(raw.get('type')), obj(raw.get('details') or raw.get('meta') or raw)
         meta, target = None, None
         amount = number(detail.get('amount'))
         if kind in ('fine','fined','playerfined') and amount is not None:
@@ -105,10 +107,17 @@ def convert_job(job):
         elif kind in ('tollgate','tollgatepaid','ferry','train') and amount is not None:
             target = 'tollgate' if kind.startswith('toll') else kind
             meta = {'cost': amount, 'source': detail.get('source'), 'destination': detail.get('destination')}
-        elif kind in ('jobcancelled','jobcanceled'):
+        elif kind in ('refuelpaid', 'refuel') and amount is not None:
+            target, meta = 'refuel', {'amount': amount}
+        elif kind in ('collision', 'repair'):
+            target, meta = kind, {k: number(detail.get(k)) for k in ('cabin','chassis','engine','transmission','wheels','total')}
+        elif kind in ('jobcancelled','jobcanceled','cancelled','canceled'):
             penalty = number(detail.get('penalty'), penalty)
         if target:
-            events.append({'type':target,'real_time':iso(raw.get('time')),'game_time':None,'location':None,'meta':meta})
+            position = obj(raw.get('location'))
+            location = {k.lower(): number(position.get(k)) for k in ('X','Y','Z')}
+            if any(v is None for v in location.values()): location = None
+            events.append({'type':target,'real_time':iso(raw.get('time')),'game_time':None,'location':location,'meta':meta})
     if status == 'cancelled' and penalty is None:
         penalty = 0  # No known penalty: do not invent a charge.
     terminal = 'job.delivered' if status == 'completed' else 'job.cancelled'

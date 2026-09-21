@@ -1,4 +1,5 @@
 import ast,asyncio,json,time,sys,unittest
+from urllib.parse import urlparse,parse_qs
 from datetime import datetime,timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ source=Path(__file__).resolve().parents[1]/'src/functions/truckershub_sync.py'
 nodes=[n for n in ast.parse(source.read_text(encoding='utf-8')).body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.ns=dict(asyncio=SimpleNamespace(sleep=AsyncMock()),json=json,time=time,datetime=datetime,timezone=timezone,Request=object,
+        self.ns=dict(urlparse=urlparse,parse_qs=parse_qs,asyncio=SimpleNamespace(sleep=AsyncMock()),json=json,time=time,datetime=datetime,timezone=timezone,Request=object,
                      get_key=AsyncMock(return_value='fixture-secret'),api_get=AsyncMock(),job_status=job_status,active_job=active_job,
                      months_since=lambda:[(2025,9)],compress=lambda x:x,decompress=lambda x:x,save_source=AsyncMock())
         exec(compile(ast.Module(body=nodes,type_ignores=[]),str(source),'exec'),self.ns)
@@ -55,5 +56,19 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         await self.run_worker();self.ns['import_job'].assert_not_awaited()
         snapshot=json.loads(next(c.args[1] for c in self.redis.set.call_args_list if c.args[0]=='truckershub-active'))
         self.assertEqual(snapshot['list'][0]['status'],'in_progress')
+
+
+
+
+    async def test_all_pages_import_without_following_external_next_url(self):
+        second=fixture();second['jobID']=801
+        self.ns['api_get'].side_effect=[{'data':[fixture()],'links':{'next':'https://untrusted.invalid/jobs?page=2'}},fixture(),{'data':[second],'links':{'next':None}},second,[]]
+        await self.run_worker()
+        self.assertEqual(self.final()['imported'],2)
+        self.assertEqual(self.ns['api_get'].call_args_list[2].args[3],'jobs?month=9&year=2025&page=2')
+    async def test_repeated_page_is_rejected_without_acknowledging_receipts(self):
+        self.ns['api_get'].side_effect=[{'data':[],'links':{'next':'?page=1'}}]
+        await self.run_worker()
+        self.assertEqual(self.final()['status'],'failed')
 
 if __name__=='__main__':unittest.main()

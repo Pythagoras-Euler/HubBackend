@@ -3,6 +3,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlparse, parse_qs
 from fastapi import Request
 from functions.general import genrid
 from functions.dataop import compress, decompress
@@ -42,6 +43,26 @@ async def import_job(request, raw):
                                 allow_external_driver=True,historical=True)
 
 
+async def month_jobs(app, rid, key, year, month):
+    page = 1
+    while True:
+        suffix = f'&page={page}' if page > 1 else ''
+        raw = await api_get(app, rid, key, f'jobs?month={month}&year={year}{suffix}', include_links=True)
+        jobs = raw.get('data') if isinstance(raw, dict) else raw
+        if not isinstance(jobs, list):
+            raise ValueError('Unexpected jobs response')
+        for job in jobs:
+            yield job
+        next_link = (raw.get('links') or {}).get('next') if isinstance(raw, dict) else None
+        if not next_link:
+            return
+        # Only use the page number; never forward credentials to a provider-supplied URL.
+        next_page = int(parse_qs(urlparse(next_link).query).get('page', ['0'])[0])
+        if next_page <= page:
+            raise ValueError('Invalid jobs pagination')
+        page = next_page
+
+
 async def reconcile(request):
     app,rid=request.app,request.state.dhrid
     key=await get_key(app,rid)
@@ -65,10 +86,7 @@ async def reconcile(request):
             if not current and app.redis.get(cachekey) and not receipt:
                 continue
             app.redis.hset(state,mapping={'month':f'{year}-{month:02d}'})
-            jobs=await api_get(app,rid,key,f'jobs?month={month}&year={year}')
-            if not isinstance(jobs,list):
-                raise ValueError('Unexpected jobs response')
-            for summary in jobs:
+            async for summary in month_jobs(app,rid,key,year,month):
                 if time.monotonic()-started>150 or counts['imported']+counts['failed']>=75:
                     exhausted=True;break
                 if not lock.owned():
