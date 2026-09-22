@@ -23,7 +23,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         async def one(rid):return (None,) if 'MAX(id)' in self.last else None
         async def all_rows(rid):return []
         self.db=SimpleNamespace(execute=AsyncMock(side_effect=execute),fetchone=AsyncMock(side_effect=one),fetchall=AsyncMock(side_effect=all_rows),commit=AsyncMock())
-        self.req=SimpleNamespace(app=SimpleNamespace(redis=self.redis,db=self.db),state=SimpleNamespace(dhrid='test'))
+        self.req=SimpleNamespace(app=SimpleNamespace(redis=self.redis,db=self.db,config=SimpleNamespace()),state=SimpleNamespace(dhrid='test'))
     async def run_worker(self):
         with patch.dict(sys.modules,{'functions.userinfo':SimpleNamespace(checkPerm=lambda *a:True),'functions.dataop':SimpleNamespace(str2list=lambda s:[])}):
             await self.ns['reconcile'](self.req)
@@ -70,5 +70,18 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.ns['api_get'].side_effect=[{'data':[],'links':{'next':'?page=1'}}]
         await self.run_worker()
         self.assertEqual(self.final()['status'],'failed')
+
+    async def test_route_requests_are_disabled_by_default(self):
+        self.ns['api_get'].side_effect=[[],[]]
+        await self.run_worker()
+        self.assertEqual(self.final()['status'],'complete')
+        self.ns['attach_route'].assert_not_awaited()
+        self.assertFalse(any('route_retry_at<' in c.args[1] for c in self.db.execute.call_args_list))
+    async def test_explicit_route_access_enables_route_fetch(self):
+        self.req.app.config.truckershub_route_access=True
+        self.db.fetchall.side_effect=lambda rid:[(800,1)] if 'route_retry_at<' in self.last else []
+        self.ns['api_get'].side_effect=[[],[]]
+        await self.run_worker()
+        self.ns['attach_route'].assert_awaited_once()
 
 if __name__=='__main__':unittest.main()

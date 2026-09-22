@@ -369,7 +369,8 @@ async def get_dlog(request: Request, response: Response, logid: int, authorizati
     if not telemetry:
         th_source = next((s['trackerid'] for s in sources if s['tracker']=='truckershub'), trackerid if tracker=='truckershub' else None)
         if 'route' not in app.config.plugins: route_status = 'disabled'
-        elif th_source is not None: route_status = app.redis.get(f'truckershub-route:{th_source}') or 'pending'
+        elif th_source is not None:
+            route_status = (app.redis.get(f'truckershub-route:{th_source}') or 'pending') if getattr(app.config, 'truckershub_route_access', False) else 'disabled'
         elif tracker=='tracksim': route_status = 'pending'
         elif tracker=='trucky': route_status = 'unsupported'
     return {"route_status":route_status,"sources":sources,"logid": logid, "public_id": t[0][7], "user": userinfo, "tracker": tracker, "trackerid": trackerid, \

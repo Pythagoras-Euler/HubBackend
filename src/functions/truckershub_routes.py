@@ -26,6 +26,8 @@ async def get_key(app, rid):
 
 async def sync_routes(request):
     app, rid = request.app, request.state.dhrid
+    if not getattr(app.config, 'truckershub_route_access', False):
+        return
     key = await get_key(app, rid)
     if not key or 'route' not in app.config.plugins:
         return

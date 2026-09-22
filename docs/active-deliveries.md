@@ -11,3 +11,7 @@ An owner with a linked Steam ID or staff with `administrator` / `delete_dlogs` c
 `GET /deliveries/active` returns active records, or closed records with `include_closed=true`; responses include server-calculated `can_abandon`. Legacy `/trucky/active` remains an alias. Legacy snapshots without a game field wait for the upgraded provider feed before reconciliation.
 
 Route labels follow actual telemetry and fetch state. TrackSim can supply route telemetry and supports route reload. TruckersHub fetches routes separately from history import, retrying unavailable routes. A provider HTTP 403 is shown as restricted, never as an available full route. Current company access returned insufficient boosts; history import remains usable. Event markers alone are not a full driven route. Trucky jobs can acquire routes through linked sources that supply them.
+
+## TruckersHub route permission switch
+
+Set `"truckershub_route_access": false` in the backend runtime config (default). While false, Hub makes no TruckersHub route requests and schedules no route retries; previously saved routes remain visible. Set it to the boolean `true` only after enabling the company route entitlement. History import and other trackers remain independent. Restart/reload config after editing the file.

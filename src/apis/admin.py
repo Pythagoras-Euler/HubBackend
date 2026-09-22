@@ -157,6 +157,9 @@ async def get_config(request: Request, response: Response, authorization: str = 
         # process whitelist
         for tt in f.keys():
             if tt in config_whitelist:
+            if tt == "truckershub_route_access" and type(new_config[tt]) is not bool:
+                response.status_code = 422
+                return {"error": "Route access must be a boolean"}
                 ffconfig[tt] = f[tt]
 
         # remove sensitive data

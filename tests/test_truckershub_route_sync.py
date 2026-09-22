@@ -15,13 +15,17 @@ class RouteSyncTests(unittest.IsolatedAsyncioTestCase):
         self.ns['get_key']=AsyncMock(return_value='test-only-token')
         self.ns['api_get']=AsyncMock()
         lock=SimpleNamespace(acquire=lambda **k:True,owned=lambda:True,release=lambda:None)
-        self.app=SimpleNamespace(config=SimpleNamespace(plugins=['route']),redis=SimpleNamespace(lock=lambda *a,**k:lock,get=lambda _:None,set=lambda *a,**k:None,hset=lambda *a,**k:None),db=SimpleNamespace(execute=AsyncMock(),fetchall=AsyncMock(return_value=[]),fetchone=AsyncMock(return_value=None),commit=AsyncMock()))
+        self.app=SimpleNamespace(config=SimpleNamespace(plugins=['route'],truckershub_route_access=True),redis=SimpleNamespace(lock=lambda *a,**k:lock,get=lambda _:None,set=lambda *a,**k:None,hset=lambda *a,**k:None),db=SimpleNamespace(execute=AsyncMock(),fetchall=AsyncMock(return_value=[]),fetchone=AsyncMock(return_value=None),commit=AsyncMock()))
         self.request=SimpleNamespace(app=self.app,state=SimpleNamespace(dhrid='test'))
         self.obj={'driver':{'steam_id':'76561198000000001'},'game':{'short_name':'eut2'},'cargo':{'unique_id':'cars'},'start_time':'2026-09-17T10:00:00Z','stop_time':'2026-09-17T11:00:00Z'}
         self.job={'jobID':44,'driver':{'steamID':'76561198000000001'},'game':{'id':'ets2'},'cargo':{'id':'cars'},'realtime':{'start':self.obj['start_time'],'end':self.obj['stop_time']},'source':{},'destination':{}}
         for loc in ('source','destination'):
             for part in ('city','company'):
                 self.obj[loc+'_'+part]={'unique_id':loc+part}; self.job[loc][part]={'id':loc+part}
+    async def test_disabled_access_makes_no_requests(self):
+        self.app.config.truckershub_route_access=False
+        await self.ns['sync_routes'](self.request)
+        self.ns['api_get'].assert_not_awaited();self.app.db.execute.assert_not_awaited()
     async def test_missing_key_makes_no_external_requests(self):
         self.ns['get_key'].return_value=''
         await self.ns['sync_routes'](self.request)

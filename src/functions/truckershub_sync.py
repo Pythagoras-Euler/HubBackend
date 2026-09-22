@@ -15,7 +15,7 @@ from logger import logger
 
 
 async def attach_route(app, rid, key, sid, lid):
-    if 'route' not in app.config.plugins:
+    if not getattr(app.config, 'truckershub_route_access', False) or 'route' not in app.config.plugins:
         return
     await app.db.execute(rid,'SELECT d.data FROM dlog d LEFT JOIN telemetry t ON t.logid=d.logid WHERE d.logid=%s AND t.logid IS NULL',(lid,))
     row=await app.db.fetchone(rid)
@@ -140,19 +140,20 @@ async def reconcile(request):
         except Exception as exc:
             app.redis.hset(state,mapping={'live_status':'unavailable'})
             app.redis.set('truckershub-active',json.dumps({'updated_at':now,'list':active}),ex=86400)
-        # Attach routes independently: route failures never roll back an imported job.
-        await app.db.execute(rid,"SELECT s.sourceid,s.logid FROM delivery_source s JOIN dlog d ON d.logid=s.logid LEFT JOIN telemetry t ON t.logid=s.logid WHERE s.provider='truckershub' AND t.logid IS NULL AND s.route_retry_at<%s ORDER BY s.route_retry_at,s.updated_at LIMIT 20",(now,))
-        for sid,lid in await app.db.fetchall(rid):
-            if time.monotonic()-started>220 or not lock.owned(): break
-            try:
-                attached = await attach_route(app,rid,key,sid,lid)
-                app.redis.set(f'truckershub-route:{sid}', 'available' if attached else 'missing', ex=3600)
-            except Exception as exc:
-                await app.db.execute(rid,'ROLLBACK')
-                app.redis.set(f'truckershub-route:{sid}', 'restricted' if isinstance(exc,RuntimeError) and str(exc)=='TruckersHub HTTP 403' else 'unavailable', ex=3600)
-            await app.db.execute(rid,"UPDATE delivery_source SET route_retry_at=%s WHERE provider='truckershub' AND sourceid=%s",(now+900,sid))
-            await app.db.commit(rid)
-            await asyncio.sleep(1.1)
+        if getattr(app.config, 'truckershub_route_access', False):
+            # Attach routes independently: route failures never roll back an imported job.
+            await app.db.execute(rid,"SELECT s.sourceid,s.logid FROM delivery_source s JOIN dlog d ON d.logid=s.logid LEFT JOIN telemetry t ON t.logid=s.logid WHERE s.provider='truckershub' AND t.logid IS NULL AND s.route_retry_at<%s ORDER BY s.route_retry_at,s.updated_at LIMIT 20",(now,))
+            for sid,lid in await app.db.fetchall(rid):
+                if time.monotonic()-started>220 or not lock.owned(): break
+                try:
+                    attached = await attach_route(app,rid,key,sid,lid)
+                    app.redis.set(f'truckershub-route:{sid}', 'available' if attached else 'missing', ex=3600)
+                except Exception as exc:
+                    await app.db.execute(rid,'ROLLBACK')
+                    app.redis.set(f'truckershub-route:{sid}', 'restricted' if isinstance(exc,RuntimeError) and str(exc)=='TruckersHub HTTP 403' else 'unavailable', ex=3600)
+                await app.db.execute(rid,"UPDATE delivery_source SET route_retry_at=%s WHERE provider='truckershub' AND sourceid=%s",(now+900,sid))
+                await app.db.commit(rid)
+                await asyncio.sleep(1.1)
         # Relink external records when the same Steam account later becomes a Hub driver.
         from functions.userinfo import checkPerm
         from functions.dataop import str2list
