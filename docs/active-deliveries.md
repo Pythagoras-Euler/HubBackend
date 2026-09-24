@@ -15,3 +15,9 @@ Route labels follow actual telemetry and fetch state. TrackSim can supply route 
 ## TruckersHub route permission switch
 
 Set `"truckershub_route_access": false` in the backend runtime config (default). While false, Hub makes no TruckersHub route requests and schedules no route retries; previously saved routes remain visible. Set it to the boolean `true` only after enabling the company route entitlement. History import and other trackers remain independent. Restart/reload config after editing the file.
+
+## Event locations without route access
+
+TruckersHub job events remain available independently of the paid route API. The converter preserves supplied start/end/cancellation and intermediate event coordinates, accepts X/Z with optional Y, and rejects zero placeholders. The event map takes precedence over missing/disabled route labels, showing isolated points. The coordinate backfill changes only locations in existing event records, preserving financial data and statistics.
+
+Full audit of 233 deliveries: 9 TruckersHub jobs have all 9 destination locations and 7 valid starts (2 upstream zero placeholders). All 224 Trucky job details and event feeds were individually checked, with no job-level coordinates or departure/arrival events returned. Intermediate Trucky event coordinates remain usable; they must not be relabeled as actual departure/arrival points.

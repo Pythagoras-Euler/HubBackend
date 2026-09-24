@@ -71,6 +71,16 @@ def vehicles(job):
     }
 
 
+def event_location(raw):
+    position = obj(raw.get('location') or raw.get('position'))
+    location = {k.lower(): number(position.get(k, position.get(k.lower()))) for k in ('X','Y','Z')}
+    if location['x'] is None or location['z'] is None or (location['x'] == 0 and location['z'] == 0):
+        return None
+    if max(abs(location['x']), abs(location['z'])) > 1e7:
+        return None
+    return location
+
+
 def convert_job(job):
     if not isinstance(job, dict):
         raise ValueError('Invalid TruckersHub job')
@@ -94,6 +104,7 @@ def convert_job(job):
         raise ValueError('Job is missing distance or income')
     cargo = obj(job.get('cargo'))
     events = [{'type':'job.started','real_time':start,'game_time':None,'location':None,'meta':{'autoLoaded':None}}]
+    terminal_location = None
     penalty = number(job.get('penalty'))
     for raw in job.get('events', []):
         raw = obj(raw)
@@ -113,15 +124,17 @@ def convert_job(job):
             target, meta = kind, {k: number(detail.get(k)) for k in ('cabin','chassis','engine','transmission','wheels','total')}
         elif kind in ('jobcancelled','jobcanceled','cancelled','canceled'):
             penalty = number(detail.get('penalty'), penalty)
+        if kind in ('started','jobstarted'):
+            events[0]['location'] = event_location(raw)
+        elif kind in ('delivered','jobdelivered','jobcancelled','jobcanceled','cancelled','canceled'):
+            terminal_location = event_location(raw)
         if target:
-            position = obj(raw.get('location'))
-            location = {k.lower(): number(position.get(k)) for k in ('X','Y','Z')}
-            if any(v is None for v in location.values()): location = None
+            location = event_location(raw)
             events.append({'type':target,'real_time':iso(raw.get('time')),'game_time':None,'location':location,'meta':meta})
     if status == 'cancelled' and penalty is None:
         penalty = 0  # No known penalty: do not invent a charge.
     terminal = 'job.delivered' if status == 'completed' else 'job.cancelled'
-    events.append({'type':terminal,'real_time':end,'game_time':None,'location':None,
+    events.append({'type':terminal,'real_time':end,'game_time':None,'location':terminal_location,
                    'meta':{'revenue':income,'distance':distance,'penalty':penalty,'autoParked':job.get('autoParked')}})
     data = {'id':int(jid), 'uuid':None,'object':'job','provider':'truckershub',
             'driver':{'steam_id':steam,'username':driver.get('username'),'profile_photo_url':driver.get('avatar')},

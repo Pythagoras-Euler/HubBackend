@@ -94,3 +94,13 @@ class RealPayloadTests(unittest.TestCase):
         self.assertEqual(events[2]['meta']['amount'],200)
         self.assertIsNone(events[2]['meta']['speed'])
         self.assertTrue(events[1]['real_time'].startswith('2025-09-01'))
+
+class EventPositionTests(unittest.TestCase):
+    def test_start_end_and_flat_event_positions_are_preserved(self):
+        raw=fixture();raw['events']=[{'type':'started','location':{'X':12,'Z':34}}, {'type':'collision','location':{'x':56,'z':78}}, {'type':'delivered','location':{'X':90,'Y':1,'Z':12}}]
+        events=convert_job(raw)['data']['object']['events']
+        self.assertEqual([e['location']['x'] for e in events],[12,56,90])
+        self.assertIsNone(events[0]['location']['y'])
+    def test_placeholder_coordinates_are_not_mapped(self):
+        raw=fixture();raw['events']=[{'type':'started','location':{'X':0,'Y':0,'Z':0}}, {'type':'delivered','location':{'X':'bad','Z':12}}]
+        self.assertTrue(all(e['location'] is None for e in convert_job(raw)['data']['object']['events']))
