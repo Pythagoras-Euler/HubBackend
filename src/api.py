@@ -57,6 +57,8 @@ async def startup_event(app):
     loop.create_task(truckershub_loop(app))
     from functions.active_deliveries import sync_loop as active_loop
     loop.create_task(active_loop(app))
+    from functions.truckersmp_identity import sync_loop as tmp_identity_loop
+    loop.create_task(tmp_identity_loop(app))
 
     if "event" in app.config.plugins:
         from plugins.event import EventNotification

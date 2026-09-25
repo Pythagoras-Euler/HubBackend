@@ -292,9 +292,12 @@ async def patch_steam(request: Request, response: Response, authorization: str =
             except:
                 pass
 
+    if str(orgsteamid) != str(steamid):
+        await app.db.execute(dhrid, "UPDATE user SET truckersmpid=NULL WHERE uid=%s", (uid,))
+        app.redis.delete(f"uinfo:{uid}")
     await app.db.execute(dhrid, f"UPDATE user SET steamid = {steamid} WHERE uid = {uid}")
     await app.db.commit(dhrid)
-    app.redis.hset(f"uinfo:{uid}", mapping = {"steamid": steamid})
+    app.redis.delete(f"uinfo:{uid}")
 
     await app.db.execute(dhrid, f"SELECT reason, expire_timestamp FROM banned WHERE steamid = {steamid}")
     t = await app.db.fetchall(dhrid)
@@ -313,41 +316,25 @@ async def patch_steam(request: Request, response: Response, authorization: str =
         else:
             return {"error": ml.tr(request, "ban_with_expire", var = {"expire": expire})}
 
-    try:
-        r = await arequests.get(app, f"https://api.truckersmp.com/v2/player/{steamid}", dhrid = dhrid)
-        if r.status_code == 200:
-            d = r.json()
-            if not d["error"]:
-                truckersmpid = d["response"]["id"]
-                await app.db.execute(dhrid, f"UPDATE user SET truckersmpid = {truckersmpid} WHERE uid = {uid}")
-                await app.db.commit(dhrid)
-                app.redis.hset(f"uinfo:{uid}", mapping = {"truckersmpid": truckersmpid})
-
-                await app.db.execute(dhrid, f"SELECT reason, expire_timestamp FROM banned WHERE truckersmpid = {truckersmpid}")
-                t = await app.db.fetchall(dhrid)
-                if len(t) > 0:
-                    await app.db.execute(dhrid, f"DELETE FROM session WHERE uid = {uid}")
-                    await app.db.commit(dhrid)
-                    reason = t[0][0]
-                    expire = t[0][1]
-                    if expire != 253402272000:
-                        expire = ml.tr(request, "until", var = {"datetime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(expire))})
-                    else:
-                        expire = ml.tr(request, "forever")
-                    response.status_code = 423
-                    if reason != "":
-                        return {"error": ml.tr(request, "ban_with_reason_expire", var = {"reason": reason, "expire": expire})}
-                    else:
-                        return {"error": ml.tr(request, "ban_with_expire", var = {"expire": expire})}
-
-                return Response(status_code=204)
-    except:
-        pass
-
-    # in case user changed steam
-    await app.db.execute(dhrid, f"UPDATE user SET truckersmpid = NULL WHERE uid = {uid}")
-    await app.db.commit(dhrid)
-    app.redis.hset(f"uinfo:{uid}", mapping = {"truckersmpid": ""})
+    from functions.truckersmp_identity import sync_user as sync_tmp
+    truckersmpid = await sync_tmp(app, dhrid, uid, steamid)
+    if truckersmpid is not None:
+        await app.db.execute(dhrid, f"SELECT reason, expire_timestamp FROM banned WHERE truckersmpid = {truckersmpid}")
+        t = await app.db.fetchall(dhrid)
+        if len(t) > 0:
+            await app.db.execute(dhrid, f"DELETE FROM session WHERE uid = {uid}")
+            await app.db.commit(dhrid)
+            reason = t[0][0]
+            expire = t[0][1]
+            if expire != 253402272000:
+                expire = ml.tr(request, "until", var = {"datetime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(expire))})
+            else:
+                expire = ml.tr(request, "forever")
+            response.status_code = 423
+            if reason != "":
+                return {"error": ml.tr(request, "ban_with_reason_expire", var = {"reason": reason, "expire": expire})}
+            else:
+                return {"error": ml.tr(request, "ban_with_expire", var = {"expire": expire})}
 
     return Response(status_code=204)
 

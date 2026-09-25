@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 import apis.user.connections as connections
+import apis.user.avatar as avatar
 import apis.user.info as info
 import apis.user.language as language
 import apis.user.manage as manage
@@ -15,6 +16,9 @@ import apis.user.privacy as privacy
 import apis.user.timezone as timezone
 
 routes = [
+    APIRoute("/user/avatar", avatar.get_avatar_settings, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/user/avatar/{source}", avatar.put_avatar, methods=["PUT"], response_class=JSONResponse),
+    APIRoute("/avatar/{uid}/{digest}.png", avatar.get_image, methods=["GET"]),
     APIRoute("/user/list", info.get_list, methods=["GET"], response_class=JSONResponse),
     APIRoute("/user/profile", info.get_profile, methods=["GET"], response_class=JSONResponse),
     APIRoute("/user/profile", info.patch_profile, methods=["PATCH"], response_class=JSONResponse),

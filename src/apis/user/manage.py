@@ -214,6 +214,9 @@ async def patch_connections(request: Request, response: Response, uid: int, auth
                 return {"error": ml.tr(request, "user_exists_with_new_connections", force_lang = au["language"])}
 
     connections = [new_connections[i] if new_connections[i] is not None else connections[i] for i in range(0,4)]
+    steam_changed = str(connections[2]) != str(userinfo['steamid'])
+    if steam_changed:
+        connections[3] = None
     connections = [x if x is not None else "NULL" for x in connections]
     connections[0] = f"'{convertQuotation(connections[0])}'" if connections[0] != "NULL" else "NULL"
 
@@ -221,6 +224,10 @@ async def patch_connections(request: Request, response: Response, uid: int, auth
 
     await app.db.execute(dhrid, f"UPDATE user SET email = {connections[0]}, discordid = {connections[1]}, steamid = {connections[2]}, truckersmpid = {connections[3]} WHERE uid = {uid}")
     await app.db.commit(dhrid)
+    if steam_changed:
+        app.redis.delete(f'uinfo:{uid}')
+        from functions.truckersmp_identity import sync_user
+        await sync_user(app, dhrid, uid, connections[2])
 
     if str(old_discordid) != str(new_discordid):
         await DeleteRoleConnection(request, old_discordid)

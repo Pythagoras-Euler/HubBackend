@@ -1,5 +1,9 @@
 """Additive tracker import schema; no historical deliveries are rewritten."""
 STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS avatar_profile (
+        uid BIGINT PRIMARY KEY, source VARCHAR(16) NOT NULL, source_url TEXT NULL,
+        digest CHAR(64) NOT NULL, image MEDIUMBLOB NOT NULL, updated_at BIGINT NOT NULL
+    ) ENGINE=InnoDB""",
     """CREATE TABLE IF NOT EXISTS active_delivery (
         provider VARCHAR(32) NOT NULL, sourceid BIGINT NOT NULL, steamid VARCHAR(20) NOT NULL,
         status VARCHAR(24) NOT NULL, payload MEDIUMTEXT NOT NULL,

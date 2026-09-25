@@ -75,6 +75,9 @@ async def get_callback(request: Request, response: Response):
         uid = t[0][0]
         username = t[0][2]
 
+    from functions.truckersmp_identity import sync_user as sync_tmp
+    await sync_tmp(app, dhrid, uid, steamid)
+
     await app.db.execute(dhrid, f"DELETE FROM session WHERE timestamp < {int(time.time()) - 86400 * 30}")
     await app.db.execute(dhrid, f"DELETE FROM banned WHERE expire_timestamp < {int(time.time())}")
 
@@ -88,7 +91,7 @@ async def get_callback(request: Request, response: Response):
         await app.db.commit(dhrid)
         return {"token": stoken, "mfa": True}
 
-    await app.db.execute(dhrid, f"SELECT reason, expire_timestamp FROM banned WHERE uid = {uid} OR steamid = {steamid}")
+    await app.db.execute(dhrid, f"SELECT reason, expire_timestamp FROM banned WHERE uid = {uid} OR steamid = {steamid} OR truckersmpid IN (SELECT truckersmpid FROM user WHERE uid = {uid})")
     t = await app.db.fetchall(dhrid)
     if len(t) > 0:
         reason = t[0][0]

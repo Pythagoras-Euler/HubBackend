@@ -376,10 +376,12 @@ async def patch_profile(request: Request, response: Response, authorization: str
             if len(name) > 32:
                 response.status_code = 400
                 return {"error": ml.tr(request, "content_too_long", var = {"item": "name", "limit": "32"}, force_lang = au["language"])}
-            avatar = convertQuotation(data["avatar"])
-            if len(name) > 256:
+            await app.db.execute(dhrid, "SELECT avatar FROM user WHERE uid=%s", (uid,))
+            current_avatar = (await app.db.fetchone(dhrid))[0] or ''
+            avatar = data.get("avatar", current_avatar)
+            if not isinstance(avatar, str) or len(avatar) > 2048:
                 response.status_code = 400
-                return {"error": ml.tr(request, "content_too_long", var = {"item": "avatar", "limit": "256"}, force_lang = au["language"])}
+                return {"error": ml.tr(request, "content_too_long", var = {"item": "avatar", "limit": "2048"}, force_lang = au["language"])}
             join_timestamp = None
             if "join_timestamp" in data.keys():
                 join_timestamp = int(data["join_timestamp"])
@@ -390,20 +392,16 @@ async def patch_profile(request: Request, response: Response, authorization: str
             response.status_code = 400
             return {"error": ml.tr(request, "bad_json", force_lang = au["language"])}
 
-        avatar_domain = getDomainFromUrl(avatar)
-        if not avatar_domain:
-            response.status_code = 400
-            return {"error": ml.tr(request, "invalid_avatar_url", force_lang = au["language"])}
-
-        ok = False
-        for domain in app.config.avatar_domain_whitelist:
-            if avatar_domain == domain or avatar_domain.endswith("." + domain): # domain / subdomain
-                ok = True
-        if not ok:
-            response.status_code = 400
-            return {"error": ml.tr(request, "avatar_domain_not_whitelisted", force_lang = au["language"])}
-
-        await app.db.execute(dhrid, f"UPDATE user SET name = '{name}', avatar = '{avatar}' WHERE uid = {uid}")
+        if avatar != current_avatar:
+            from functions.avatars import save_avatar
+            try:
+                avatar = await save_avatar(app, dhrid, uid, 'external', url=avatar)
+            except Exception:
+                response.status_code=422
+                return {'error':'Invalid avatar image; use a static public HTTPS PNG, JPEG or WebP under 2 MiB'}
+        # Avatar writes belong to save_avatar; a name-only save must not overwrite
+        # an avatar refreshed concurrently by the provider worker.
+        await app.db.execute(dhrid, f"UPDATE user SET name = '{name}' WHERE uid = {uid}")
         if staffmode and join_timestamp is not None:
             await app.db.execute(dhrid, f"UPDATE user SET join_timestamp = {join_timestamp} WHERE uid = {uid}")
         await app.db.commit(dhrid)
