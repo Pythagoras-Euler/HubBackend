@@ -393,6 +393,9 @@ async def patch_profile(request: Request, response: Response, authorization: str
             return {"error": ml.tr(request, "bad_json", force_lang = au["language"])}
 
         if avatar != current_avatar:
+            limited = await ratelimit(request, 'PUT /user/avatar', 60, 5)
+            if limited[0]:
+                return limited[1]
             from functions.avatars import save_avatar
             try:
                 avatar = await save_avatar(app, dhrid, uid, 'external', url=avatar)
