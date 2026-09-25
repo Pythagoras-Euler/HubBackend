@@ -1,3 +1,5 @@
+from email_links import confirmation_link
+from password_policy import valid_new_password, verify_password
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
@@ -65,7 +67,7 @@ async def post_password(request: Request, response: Response):
         return {"error": ml.tr(request, "invalid_email_or_password")}
     uid = t[0][0]
     pwdhash = t[0][1]
-    ok = bcrypt.checkpw(password, b64d(pwdhash).encode())
+    ok = verify_password(password, b64d(pwdhash).encode())
     if not ok:
         response.status_code = 401
         return {"error": ml.tr(request, "invalid_email_or_password")}
@@ -149,7 +151,7 @@ async def post_register(request: Request, response: Response):
     data = await request.json()
     try:
         email = convertQuotation(data["email"])
-        password = str(data["password"])
+        password = data["password"]
         captcha_response = data["captcha-response"]
     except:
         response.status_code = 400
@@ -170,12 +172,7 @@ async def post_register(request: Request, response: Response):
             response.status_code = 503
             return {"error": ml.tr(request, "captcha_api_inaccessible")}
 
-    if len(password) >= 8:
-        if bool(re.match('((?=.*\\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,30})', password)) is not True and \
-            (bool(re.match('((\\d*)([a-z]*)([A-Z]*)([!@#$%^&*]*).{8,30})', password)) is True):
-            response.status_code = 400
-            return {"error": ml.tr(request, "weak_password")}
-    else:
+    if not valid_new_password(password):
         response.status_code = 400
         return {"error": ml.tr(request, "weak_password")}
 
@@ -241,7 +238,7 @@ async def post_register(request: Request, response: Response):
     await app.db.execute(dhrid, f"INSERT INTO email_confirmation VALUES ({uid}, '{secret}', 'register/{email}', {int(time.time() + 86400)})")
     await app.db.commit(dhrid)
 
-    link = app.config.frontend_urls.email_confirm.replace("{secret}", secret)
+    link = confirmation_link(app.config.frontend_urls.email_confirm, app.config.domain, secret)
     await app.db.extend_conn(dhrid, 15)
     ok = (await sendEmail(app, username, email, "register", link))
     await app.db.extend_conn(dhrid, 2)
@@ -325,7 +322,7 @@ async def post_reset(request: Request, response: Response):
     await app.db.execute(dhrid, f"INSERT INTO email_confirmation VALUES ({uid}, '{secret}', 'reset-password/{email}', {int(time.time() + 3600)})")
     await app.db.commit(dhrid)
 
-    link = app.config.frontend_urls.email_confirm.replace("{secret}", secret)
+    link = confirmation_link(app.config.frontend_urls.email_confirm, app.config.domain, secret)
     await app.db.extend_conn(dhrid, 15)
     ok = (await sendEmail(app, username, email, "reset_password", link))
     await app.db.extend_conn(dhrid, 2)
@@ -479,17 +476,12 @@ async def post_email(request: Request, response: Response, secret: str, authoriz
     elif operation.startswith("reset-password/"):
         data = await request.json()
         try:
-            password = str(data["password"])
+            password = data["password"]
         except:
             response.status_code = 400
             return {"error": ml.tr(request, "bad_json")}
 
-        if len(password) >= 8:
-            if bool(re.match('((?=.*\\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,30})', password)) is not True and \
-                (bool(re.match('((\\d*)([a-z]*)([A-Z]*)([!@#$%^&*]*).{8,30})', password)) is True):
-                response.status_code = 400
-                return {"error": ml.tr(request, "weak_password", force_lang = aulanguage)}
-        else:
+        if not valid_new_password(password):
             response.status_code = 400
             return {"error": ml.tr(request, "weak_password", force_lang = aulanguage)}
 

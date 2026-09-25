@@ -1,3 +1,4 @@
+from email_links import confirmation_link
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
@@ -52,7 +53,7 @@ async def post_resend_confirmation(request: Request, response: Response, authori
     await app.db.execute(dhrid, f"INSERT INTO email_confirmation VALUES ({uid}, '{secret}', 'register/{email}', {expire})")
     await app.db.commit(dhrid)
 
-    link = app.config.frontend_urls.email_confirm.replace("{secret}", secret)
+    link = confirmation_link(app.config.frontend_urls.email_confirm, app.config.domain, secret)
     await app.db.extend_conn(dhrid, 15)
     ok = (await sendEmail(app, au["name"], email, "register", link))
     await app.db.extend_conn(dhrid, 2)
@@ -108,7 +109,7 @@ async def patch_email(request: Request, response: Response, authorization: str =
     await app.db.execute(dhrid, f"INSERT INTO email_confirmation VALUES ({uid}, '{secret}', 'update-email/{new_email}', {int(time.time() + 3600)})")
     await app.db.commit(dhrid)
 
-    link = app.config.frontend_urls.email_confirm.replace("{secret}", secret)
+    link = confirmation_link(app.config.frontend_urls.email_confirm, app.config.domain, secret)
     await app.db.extend_conn(dhrid, 15)
     ok = (await sendEmail(app, au["name"], new_email, "update_email", link))
     await app.db.extend_conn(dhrid, 2)

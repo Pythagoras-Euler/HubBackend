@@ -1,3 +1,4 @@
+from password_policy import valid_new_password
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
@@ -51,7 +52,7 @@ async def patch_password(request: Request, response: Response, authorization: st
 
     data = await request.json()
     try:
-        password = str(data["password"])
+        password = data["password"]
     except:
         response.status_code = 400
         return {"error": ml.tr(request, "bad_json", force_lang = au["language"])}
@@ -66,12 +67,7 @@ async def patch_password(request: Request, response: Response, authorization: st
         response.status_code = 409
         return {"error": ml.tr(request, "email_not_unique", force_lang = au["language"])}
 
-    if len(password) >= 8:
-        if bool(re.match('((?=.*\\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,30})', password)) is not True and \
-            (bool(re.match('((\\d*)([a-z]*)([A-Z]*)([!@#$%^&*]*).{8,30})', password)) is True):
-            response.status_code = 400
-            return {"error": ml.tr(request, "weak_password", force_lang = au["language"])}
-    else:
+    if not valid_new_password(password):
         response.status_code = 400
         return {"error": ml.tr(request, "weak_password", force_lang = au["language"])}
 

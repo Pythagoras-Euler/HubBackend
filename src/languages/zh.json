@@ -33,7 +33,7 @@
   "user_didnt_join_discord": "用户尚未加入 Discord 服务器。",
   "current_user_didnt_join_discord": "您尚未加入 Discord 服务器。",
   "email_not_unique": "您的电子邮件已连接到多个用户，因此您无法启用密码登录。",
-  "weak_password": "密码太弱",
+  "weak_password": "密码须为 8–30 个字符，包含英文大写、小写字母、数字 0–9 及 !@#$%^&* 中的符号；不能含空白或控制字符，UTF-8 编码最多 72 字节。",
   "invalid_mfa_secret": "MFA 机密无效",
   "mfa_already_enabled": "MFA 已启用",
   "mfa_not_enabled": "MFA 未启用",

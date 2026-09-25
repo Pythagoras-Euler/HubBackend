@@ -36,7 +36,7 @@
     "user_didnt_join_discord": "The user has not joined the Discord server.",
     "current_user_didnt_join_discord": "You have not joined the Discord server.",
     "email_not_unique": "Your email is connected to multiple users, thus you cannot enable password login.",
-    "weak_password": "Password Too Weak",
+    "weak_password": "Use 8–30 characters with uppercase and lowercase English letters, a digit (0–9), and a symbol from !@#$%^&*. No whitespace or control characters; at most 72 UTF-8 bytes.",
     "invalid_mfa_secret": "Invalid MFA Secret",
     "mfa_already_enabled": "MFA Already Enabled",
     "mfa_not_enabled": "MFA Not Enabled",
