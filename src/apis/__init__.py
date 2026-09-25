@@ -6,13 +6,14 @@ from fastapi.routing import APIRoute
 
 import apis.admin as admin
 import apis.info as info
-from apis.map_info import get_map_info
+from apis.map_info import get_map_info, get_tmp_servers
 
 routes = [
     APIRoute("/", info.get_index, methods=["GET"], response_class=JSONResponse),
     APIRoute("/status", info.get_status, methods=["GET"], response_class=JSONResponse),
     APIRoute("/status/database/restart", info.restart_database, methods=["POST"], response_class=JSONResponse),
     APIRoute("/languages", info.get_languages, methods=["GET"], response_class=JSONResponse),
+    APIRoute("/map/servers", get_tmp_servers, methods=["GET"], response_class=JSONResponse),
     APIRoute("/map/info/{game}/{variant}", get_map_info, methods=["GET"], response_class=JSONResponse),
 
     APIRoute("/discord/role-connection/enable", admin.post_discord_role_connection_enable, methods=["POST"], response_class=JSONResponse),
