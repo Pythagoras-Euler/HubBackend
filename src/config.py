@@ -156,19 +156,19 @@ default_config = {
         "register": {
             "subject": "Register Acccount",
             "from_email": "VTC <email>",
-            "html": "You are registering an account in Drivers Hub. Please click the link below to verify your email.<br>{link}",
+            "html": "You are registering an account in Drivers Hub. Please click the link below to verify your email.<br><a href=\"{link}\">{link}</a>",
             "plain": "You are registering an account in Drivers Hub. Please click the link below to verify your email.\n{link}"
         },
         "update_email": {
             "subject": "Update Email",
             "from_email": "VTC <email>",
-            "html": "You are updating your email in Drivers Hub. Please click the link below to verify your email.<br>{link}",
+            "html": "You are updating your email in Drivers Hub. Please click the link below to verify your email.<br><a href=\"{link}\">{link}</a>",
             "plain": "You are updating your email in Drivers Hub. Please click the link below to verify your email.\n{link}"
         },
         "reset_password": {
             "subject": "Reset Password",
             "from_email": "VTC <email>",
-            "html": "You are resetting your password in Drivers Hub. Please click the link below to continue.<br>{link}",
+            "html": "You are resetting your password in Drivers Hub. Please click the link below to continue.<br><a href=\"{link}\">{link}</a>",
             "plain": "You are resetting your password in Drivers Hub. Please click the link below to continue.\n{link}"
         }
     },

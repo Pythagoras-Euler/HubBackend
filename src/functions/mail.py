@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 
 import socks
 from aiosmtplib import SMTP
+from email_content import render_email_html
 
 
 def emailConfigured(app):
@@ -33,7 +34,7 @@ async def sendEmail(app, name, email, category, link):
         'plain', 'utf-8'
     )
     html_text = MIMEText(
-        app.config_dict["email_template"][category]["html"].replace("{link}", link),
+        render_email_html(app.config_dict["email_template"][category]["html"], link),
         'html', 'utf-8'
     )
 
