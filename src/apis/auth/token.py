@@ -131,7 +131,8 @@ async def get_list(request: Request, response: Response, authorization: str = He
     for tt in t:
         tk = tt[0]
         tk = sha256(tk.encode()).hexdigest()
-        ret.append({"hash": tk, "ip": tt[1], "country": getFullCountry(tt[3]), "user_agent": tt[4], "create_timestamp": tt[2], "last_used_timestamp": tt[5]})
+        location = location_for_ip(tt[1], tt[3], au.get('language') or request.headers.get('accept-language', 'en').split(',')[0])
+        ret.append({"hash": tk, "ip": tt[1], "country": location, "user_agent": tt[4], "create_timestamp": tt[2], "last_used_timestamp": tt[5]})
 
     await app.db.execute(dhrid, f"SELECT COUNT(*) FROM session WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)

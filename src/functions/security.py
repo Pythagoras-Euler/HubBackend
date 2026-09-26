@@ -353,7 +353,7 @@ async def auth(authorization, request, allow_application_token = False, check_me
 
         # check country
         if app.config.security_level >= 1 and request.client.host not in app.config.whitelist_ips:
-            if curCountry != country and country != "":
+            if country_changed(country, curCountry, ip):
                 await app.db.new_conn(dhrid, db_name = app.config.db_name)
                 await app.db.execute(dhrid, f"DELETE FROM session WHERE token = '{stoken}'")
                 await app.db.commit(dhrid)

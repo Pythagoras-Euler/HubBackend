@@ -15,6 +15,7 @@ from fastapi import Request
 import multilang as ml
 from functions.dataop import *
 from static import *
+from ip_location import country_for_ip, country_changed, local_ip, request_country, location_for_ip
 
 
 class Dict2Obj(object):
@@ -88,33 +89,22 @@ def getDomainFromUrl(s):
         return False
 
 def getFullCountry(abbr):
+    if not abbr or abbr.upper() == "XX":
+        return "-*-*-"
     if abbr.upper() in ISO_COUNTRIES.keys():
         return convertQuotation(ISO_COUNTRIES[abbr.upper()])
     else:
         return ""
 
 def is_local_ip(ip):
-    private_ipv4 = re.compile(r'^(127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})$')
-    private_ipv6 = re.compile(r'^(::1|fc00::/7)$')
-    return bool(private_ipv4.match(ip) or private_ipv6.match(ip))
+    return local_ip(ip)
 
 def getRequestCountry(request, abbr = False):
-    if "cf-ipcountry" in request.headers.keys():
-        country = request.headers["cf-ipcountry"]
-        if country.upper() in ISO_COUNTRIES.keys(): # makre sure abbr is a valid country code
-            if abbr:
-                return convertQuotation(request.headers["cf-ipcountry"])
-            else:
-                return convertQuotation(ISO_COUNTRIES[country.upper()])
-    if is_local_ip(request.client.host):
-        if abbr:
-            return "00"
-        else:
-            return "Local Network"
+    country = request_country(request)
     if abbr:
-        return "XX"
-    else:
-        return "Unknown Region"
+        return country
+    language = request.headers.get('accept-language', 'en').split(',')[0]
+    return convertQuotation(location_for_ip(request.client.host if request.client else '', country, language))
 
 def getUserAgent(request):
     if "user-agent" in request.headers.keys():
