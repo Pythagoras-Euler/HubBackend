@@ -12,6 +12,7 @@ from fastapi import Header, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 import multilang as ml
+from account_ids import AccountIDs
 from functions import *
 
 
@@ -108,10 +109,11 @@ async def get_list(request: Request, response: Response, authorization: str = He
         limit += f"AND user.join_timestamp <= {joined_before} "
 
     hrole = {}
+    public_order = "aid.public_id" if order_by == "userid" else f"user.{order_by}"
     if order_by_last_seen:
-        await app.db.execute(dhrid, f"SELECT user.userid, user.roles FROM user LEFT JOIN user_activity ON user.uid = user_activity.uid WHERE LOWER(user.name) LIKE '%{name}%' AND user.userid >= 0 {limit} ORDER BY user_activity.timestamp {order}, user.userid ASC")
+        await app.db.execute(dhrid, f"SELECT user.userid, user.roles FROM user LEFT JOIN user_activity ON user.uid = user_activity.uid LEFT JOIN account_id aid ON aid.uid=user.uid WHERE LOWER(user.name) LIKE '%{name}%' AND user.userid >= 0 {limit} ORDER BY user_activity.timestamp {order}, aid.public_id ASC")
     else:
-        await app.db.execute(dhrid, f"SELECT user.userid, user.roles FROM user LEFT JOIN user_activity ON user.uid = user_activity.uid WHERE LOWER(user.name) LIKE '%{name}%' AND user.userid >= 0 {limit} ORDER BY user.{order_by} {order}, user.userid ASC")
+        await app.db.execute(dhrid, f"SELECT user.userid, user.roles FROM user LEFT JOIN user_activity ON user.uid = user_activity.uid LEFT JOIN account_id aid ON aid.uid=user.uid WHERE LOWER(user.name) LIKE '%{name}%' AND user.userid >= 0 {limit} ORDER BY {public_order} {order}, aid.public_id ASC")
     t = await app.db.fetchall(dhrid)
     rret = {}
     for tt in t:
@@ -283,7 +285,7 @@ async def get_banner(request: Request, response: Response,
         r = await arequests.post(app, app.banner_service_url, data=json.dumps({"company_abbr": app.config.abbr, \
             "company_name": app.config.name, "logo_url": app.config.logo_url, "hex_color": app.config.hex_color, \
             "background_opacity": app.config.banner_background_opacity, "background_url": app.config.banner_background_url, \
-            "userid": userid, "language": language, "joined": joined, "highest_role": highest_role, \
+            "userid": await AccountIDs(app.db, dhrid).ensure(uid), "language": language, "joined": joined, "highest_role": highest_role, \
             "avatar": avatar, "name": name, "first_row": first_row, \
             "rank": rank_name, "division": division_name, "distance": distance, "profit": profit}), \
             headers = {"Content-Type": "application/json"}, timeout = 15)
@@ -294,7 +296,8 @@ async def get_banner(request: Request, response: Response,
         response = StreamingResponse(iter([r.content]), media_type="image/jpeg")
         for k in rl[1].keys():
             response.headers[k] = rl[1][k]
-        response.headers["Cache-Control"] = "public, max-age=600, stale-if-error=86400"
+        # The public account ID can be revoked immediately after a rename.
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     except Exception as exc:

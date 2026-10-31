@@ -10,6 +10,8 @@ from fastapi import Header, Request, Response
 from fastapi.responses import StreamingResponse
 
 import multilang as ml
+from account_ids import AccountIDs
+from account_id_transport import Boundary
 from functions import *
 
 
@@ -219,8 +221,8 @@ async def post_balance_transfer(request: Request, response: Response, authorizat
         from_message = "  \n" + ml.tr(request, "economy_transaction_message", var = {"message": message}, force_lang = from_user_language)
         to_message = "  \n" + ml.tr(request, "economy_transaction_message", var = {"message": message}, force_lang = to_user_language)
 
-    await notification(request, "economy", from_user["uid"], ml.tr(request, "economy_sent_transaction", var = {"amount": amount, "currency_name": app.config.economy.currency_name, "to_user": to_user["name"], "to_userid": to_user["userid"] if to_user["userid"] is not None else "N/A", "message": from_message}, force_lang = from_user_language))
-    await notification(request, "economy", to_user["uid"], ml.tr(request, "economy_received_transaction", var = {"amount": amount, "currency_name": app.config.economy.currency_name, "from_user": from_user["name"], "from_userid": from_user["userid"] if from_user["userid"] is not None else "N/A", "message": to_message}, force_lang = to_user_language))
+    await notification(request, "economy", from_user["uid"], ml.tr(request, "economy_sent_transaction", var = {"amount": amount, "currency_name": app.config.economy.currency_name, "to_user": to_user["name"], "to_userid": await PublicMemberID(request, to_user["userid"] if to_user["userid"] is not None else "N/A"), "message": from_message}, force_lang = from_user_language))
+    await notification(request, "economy", to_user["uid"], ml.tr(request, "economy_received_transaction", var = {"amount": amount, "currency_name": app.config.economy.currency_name, "from_user": from_user["name"], "from_userid": await PublicMemberID(request, from_user["userid"] if from_user["userid"] is not None else "N/A"), "message": to_message}, force_lang = to_user_language))
 
     if company_balance_perm_ok:
         return {"from_balance": from_balance - amount, "to_balance": to_balance + amount}
@@ -532,6 +534,7 @@ async def get_balance_transaction_export(request: Request, response: Response, u
 
     f = BytesIO()
     f.write(b"txid, from_userid, to_userid, executor_userid, amount, message, from_new_balance, to_new_balance, time\n")
+    public_boundary = Boundary(AccountIDs(app.db, dhrid))
 
     miscuserid = {-1000: "company", -1001: "dealership", -1002: "garage_agency", -1003: "client", -1004: "service_station", -1005: "scrap_station", -1005: "blackhole"}
     await app.db.execute(dhrid, f"SELECT txid, from_userid, to_userid, amount, note, message, from_new_balance, to_new_balance, timestamp FROM economy_transaction WHERE txid >= 0 AND (from_userid = {userid} OR to_userid = {userid}) {limit} ORDER BY timestamp DESC")
@@ -566,7 +569,9 @@ async def get_balance_transaction_export(request: Request, response: Response, u
             elif tt[2] != au["userid"] or to_new_balance is None:
                 to_new_balance = "/"
 
-        data = [tt[0], from_userid, to_userid, executorid, tt[3], get_transaction_message(tt[4], tt[5]), from_new_balance, to_new_balance, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(tt[8]))]
+        from_userid, to_userid, executorid = [await public_boundary.encode(v) for v in (from_userid, to_userid, executorid)]
+        public_message = await public_boundary.transform(get_transaction_message(tt[4], tt[5]))
+        data = [tt[0], from_userid, to_userid, executorid, tt[3], public_message, from_new_balance, to_new_balance, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(tt[8]))]
 
         for i in range(len(data)):
             if data[i] is None:

@@ -65,7 +65,7 @@ default_config = {
 
     "openapi": False,
     "frontend_urls": {
-        "member": "https://{domain}/member?userid={userid}",
+        "member": "https://{domain}/u/{userid}",
         "delivery": "https://{domain}/delivery?logid={logid}",
         "email_confirm": "https://{domain}/auth/email?secret={secret}"
     },
@@ -175,6 +175,9 @@ default_config = {
 
     "perms": {
         "administrator": [0],
+        "view_account_id_history": [],
+        "manage_account_ids": [],
+        "manage_account_id_rules": [],
         "update_config": [],
         "reload_config": [],
         "restart_service": [],

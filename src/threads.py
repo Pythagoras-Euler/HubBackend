@@ -73,6 +73,8 @@ async def ClearOutdatedData(app):
             for tt in t:
                 uid = tt[0]
                 discordid = tt[1]
+                from account_ids import AccountIDs
+                await AccountIDs(app.db, dhrid).retire(uid)
                 await app.db.execute(dhrid, f"DELETE FROM user WHERE uid = {uid}")
                 await app.db.execute(dhrid, f"DELETE FROM pending_user_deletion WHERE uid = {uid}")
                 await app.db.execute(dhrid, f"DELETE FROM email_confirmation WHERE uid = {uid}")
@@ -97,6 +99,8 @@ async def ClearOutdatedData(app):
                     discordid = p[0][0]
                     await DeleteRoleConnection(request, discordid)
 
+                from account_ids import AccountIDs
+                await AccountIDs(app.db, dhrid).retire(uid)
                 await app.db.execute(dhrid, f"DELETE FROM user WHERE uid = {uid}")
                 await app.db.execute(dhrid, f"DELETE FROM pending_user_deletion WHERE uid = {uid}")
                 await app.db.execute(dhrid, f"DELETE FROM email_confirmation WHERE uid = {uid}")

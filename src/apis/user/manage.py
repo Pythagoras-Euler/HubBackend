@@ -110,14 +110,16 @@ async def post_accept(request: Request, response: Response, uid: int, authorizat
 
     await app.db.execute(dhrid, f"UPDATE user SET userid = {userid}, join_timestamp = {int(time.time())}, tracker_in_use = {tracker_in_use} WHERE uid = {uid}")
     await app.db.execute(dhrid, f"UPDATE settings SET sval = {userid+1} WHERE skey = 'nxtuserid'")
-    await AuditLog(request, au["uid"], "member", ml.ctr(request, "accepted_user_as_member", var = {"username": name, "userid": userid, "uid": uid}))
+    await AuditLog(request, au["uid"], "member", ml.ctr(request, "accepted_user_as_member", var = {"username": name, "userid": await PublicMemberID(request, userid), "uid": uid}))
     await app.db.commit(dhrid)
 
     await GetUserInfo(request, uid = uid, nocache = True) # purge cache
     app.redis.set(f"umap:userid={userid}", uid)
     app.redis.expire(f"umap:userid={userid}", 60)
 
-    await notification(request, "member", uid, ml.tr(request, "member_accepted", var = {"userid": userid}, force_lang = await GetUserLanguage(request, uid)))
+    from account_ids import AccountIDs
+    public_user_id = await AccountIDs(app.db, dhrid).ensure(uid)
+    await notification(request, "member", uid, ml.tr(request, "member_accepted", var = {"userid": await PublicMemberID(request, public_user_id)}, force_lang = await GetUserLanguage(request, uid)))
 
     def setvar(msg):
         return msg.replace("{mention}", f"<@{discordid}>").replace("{name}", username).replace("{userid}", str(userid)).replace("{uid}", str(uid)).replace("{avatar}", validateUrl(avatar)).replace("{staff_mention}", f"<@!{au['discordid']}>").replace("{staff_name}", au["name"]).replace("{staff_userid}", str(au["userid"])).replace("{staff_uid}", str(au["uid"])).replace("{staff_avatar}", validateUrl(au["avatar"]))
@@ -656,6 +658,8 @@ async def delete_user(request: Request, response: Response, uid: int, authorizat
             response.status_code = 428
             return {"error": ml.tr(request, "dismiss_before_delete", force_lang = au["language"])}
 
+        from account_ids import AccountIDs
+        await AccountIDs(app.db, dhrid).retire(uid, au["uid"])
         await app.db.execute(dhrid, f"DELETE FROM user WHERE uid = {uid}")
         await app.db.execute(dhrid, f"DELETE FROM pending_user_deletion WHERE uid = {uid}")
         await app.db.execute(dhrid, f"DELETE FROM email_confirmation WHERE uid = {uid}")

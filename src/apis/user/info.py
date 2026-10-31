@@ -102,7 +102,7 @@ async def get_list(request: Request, response: Response, authorization: str = He
     return {"list": ret, "total_items": total_items, "total_pages": int(math.ceil(total_items / page_size))}
 
 async def get_profile(request: Request, response: Response, authorization: str = Header(None), \
-    userid: Optional[int] = None, uid: Optional[int] = None, discordid: Optional[int] = None, steamid: Optional[int] = None, truckersmpid: Optional[int] = None, email: Optional[str] = None, role_history_limit: Optional[int] = 50, ban_history_limit: Optional[int] = 50):
+    userid: Optional[int] = None, uid: Optional[int] = None, discordid: Optional[int] = None, steamid: Optional[int] = None, truckersmpid: Optional[int] = None, email: Optional[str] = None, role_history_limit: Optional[int] = 50, ban_history_limit: Optional[int] = 50, public_user_id: Optional[str] = None):
     """Returns the profile of a specific user
 
     If no request param is provided, then returns the profile of the authorized user."""
@@ -119,7 +119,7 @@ async def get_profile(request: Request, response: Response, authorization: str =
     request_uid = -1
     aulanguage = ""
     au = None
-    if userid is None and uid is None and discordid is None and steamid is None and truckersmpid is None and email is None:
+    if userid is None and uid is None and discordid is None and steamid is None and truckersmpid is None and email is None and public_user_id is None:
         au = await auth(authorization, request, check_member = False, allow_application_token = True)
         if au["error"]:
             response.status_code = au["code"]
@@ -139,6 +139,14 @@ async def get_profile(request: Request, response: Response, authorization: str =
             request_uid = au["uid"]
             aulanguage = au["language"]
 
+    if public_user_id is not None:
+        from account_ids import AccountIDs, IDProblem
+        try:
+            uid = await AccountIDs(app.db, dhrid).resolve(public_user_id)
+            userid = None
+        except IDProblem:
+            response.status_code = 404
+            return {"error": ml.tr(request, "user_not_found", force_lang=aulanguage)}
     qu = ""
     if userid is not None:
         qu = f"userid = {userid}"

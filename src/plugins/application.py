@@ -376,7 +376,7 @@ async def post_application(request: Request, response: Response, authorization: 
 
     await app.db.execute(dhrid, f"SELECT name, avatar, email, truckersmpid, steamid, userid FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
-    msg = f"**UID**: {uid}\n**User ID**: {userid}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n"
+    msg = f"**UID**: {uid}\n**User ID**: {await PublicMemberID(request, userid)}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n"
     for d in application.keys():
         msg += f"**{d}**\n{application[d]}\n\n"
 
@@ -385,7 +385,7 @@ async def post_application(request: Request, response: Response, authorization: 
             author = {"name": t[0][0], "icon_url": t[0][1]}
 
             if len(msg) > 4000:
-                msg = f"**UID**: {uid}\n**User ID**: {userid}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n*{ml.ctr(request, 'application_message_too_long')}*"
+                msg = f"**UID**: {uid}\n**User ID**: {await PublicMemberID(request, userid)}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n*{ml.ctr(request, 'application_message_too_long')}*"
 
             headers = {"Authorization": f"Bot {app.config.discord_bot_token}", "Content-Type": "application/json"}
 
@@ -455,7 +455,7 @@ async def post_message(request: Request, response: Response, applicationid: int,
 
     await app.db.execute(dhrid, f"SELECT name, avatar, email, truckersmpid, steamid FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
-    msg = f"**UID**: {uid}\n**User ID**: {userid}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n"
+    msg = f"**UID**: {uid}\n**User ID**: {await PublicMemberID(request, userid)}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n"
     msg += f"**New message**: \n{message}\n\n"
 
     application_type_text = ""
@@ -481,7 +481,7 @@ async def post_message(request: Request, response: Response, applicationid: int,
             author = {"name": t[0][0], "icon_url": t[0][1]}
 
             if len(msg) > 4000:
-                msg = f"**UID**: {uid}\n**User ID**: {userid}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n*{ml.ctr(request, 'application_message_too_long')}*"
+                msg = f"**UID**: {uid}\n**User ID**: {await PublicMemberID(request, userid)}\n**Email**: {t[0][2]}\n**Discord**: <@{discordid}> (`{discordid}`)\n**Steam ID**: [{t[0][4]}](https://steamcommunity.com/profiles/{t[0][4]})\n**TruckersMP ID**: [{t[0][3]}](https://truckersmp.com/user/{t[0][3]})\n\n*{ml.ctr(request, 'application_message_too_long')}*"
 
             headers = {"Authorization": f"Bot {app.config.discord_bot_token}", "Content-Type": "application/json"}
 

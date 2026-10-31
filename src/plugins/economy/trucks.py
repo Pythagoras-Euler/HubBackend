@@ -449,7 +449,7 @@ async def post_truck_purchase(request: Request, response: Response, truckid: str
     await app.db.commit(dhrid)
 
     username = (await GetUserInfo(request, userid = foruser, is_internal_function = True))["name"]
-    await AuditLog(request, au["uid"], "economy", ml.ctr(request, "purchased_truck", var = {"name": truck["brand"] + " " + truck["model"], "id": truckid, "username": username, "userid": foruser}))
+    await AuditLog(request, au["uid"], "economy", ml.ctr(request, "purchased_truck", var = {"name": truck["brand"] + " " + truck["model"], "id": truckid, "username": username, "userid": await PublicMemberID(request, foruser)}))
 
     return {"vehicleid": vehicleid, "cost": truck["price"], "balance": round(balance - truck["price"])}
 
@@ -584,7 +584,7 @@ async def post_truck_transfer(request: Request, response: Response, vehicleid: i
         await app.db.execute(dhrid, f"INSERT INTO economy_transaction(from_userid, to_userid, amount, note, message, from_new_balance, to_new_balance, timestamp) VALUES ({current_owner}, {foruser}, NULL, 't{vehicleid}-transfer', '{convertQuotation(message)}', NULL, NULL, {int(time.time())})")
 
         username = (await GetUserInfo(request, userid = foruser, is_internal_function = True))["name"]
-        await AuditLog(request, au["uid"], "economy", ml.ctr(request, "transferred_truck", var = {"id": vehicleid, "username": username, "userid": foruser}))
+        await AuditLog(request, au["uid"], "economy", ml.ctr(request, "transferred_truck", var = {"id": vehicleid, "username": username, "userid": await PublicMemberID(request, foruser)}))
     if current_assigneeid != assigneeid:
         if current_assigneeid is None:
             current_assigneeid = "NULL"
@@ -592,7 +592,7 @@ async def post_truck_transfer(request: Request, response: Response, vehicleid: i
 
         if assigneeid != "NULL":
             username = (await GetUserInfo(request, userid = assigneeid, is_internal_function = True))["name"]
-            await AuditLog(request, au["uid"], "economy", ml.ctr(request, "reassigned_truck", var = {"id": vehicleid, "username": username, "userid": foruser}))
+            await AuditLog(request, au["uid"], "economy", ml.ctr(request, "reassigned_truck", var = {"id": vehicleid, "username": username, "userid": await PublicMemberID(request, foruser)}))
         else:
             await AuditLog(request, au["uid"], "economy", ml.ctr(request, "removed_truck_assignee", var = {"id": vehicleid}))
 
@@ -613,8 +613,8 @@ async def post_truck_transfer(request: Request, response: Response, vehicleid: i
     if truckid in app.trucks.keys():
         truck = app.trucks[truckid]["brand"] + " " + app.trucks[truckid]["model"]
 
-    await notification(request, "economy", from_user["uid"], ml.tr(request, "economy_sent_transaction_item", var = {"type": ml.tr(request, "truck", force_lang = from_user_language).title(), "name": f"#{vehicleid} ({truck})", "to_user": to_user["name"], "to_userid": to_user["userid"] if to_user["userid"] is not None else "N/A", "message": from_message}, force_lang = from_user_language))
-    await notification(request, "economy", to_user["uid"], ml.tr(request, "economy_received_transaction_item", var = {"type": ml.tr(request, "truck", force_lang = from_user_language).title(), "name": f"#{vehicleid} ({truck})", "from_user": from_user["name"], "from_userid": from_user["userid"] if from_user["userid"] is not None else "N/A", "message": to_message}, force_lang = to_user_language))
+    await notification(request, "economy", from_user["uid"], ml.tr(request, "economy_sent_transaction_item", var = {"type": ml.tr(request, "truck", force_lang = from_user_language).title(), "name": f"#{vehicleid} ({truck})", "to_user": to_user["name"], "to_userid": await PublicMemberID(request, to_user["userid"] if to_user["userid"] is not None else "N/A"), "message": from_message}, force_lang = from_user_language))
+    await notification(request, "economy", to_user["uid"], ml.tr(request, "economy_received_transaction_item", var = {"type": ml.tr(request, "truck", force_lang = from_user_language).title(), "name": f"#{vehicleid} ({truck})", "from_user": from_user["name"], "from_userid": await PublicMemberID(request, from_user["userid"] if from_user["userid"] is not None else "N/A"), "message": to_message}, force_lang = to_user_language))
 
     return Response(status_code=204)
 

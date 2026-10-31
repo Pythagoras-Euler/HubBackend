@@ -29,6 +29,9 @@ async def startup_event(app):
     rid = "public-id-startup"
     await app.db.new_conn(rid, db_name=app.config.db_name)
     try:
+        await app.db.execute(rid, "SELECT COUNT(*) FROM user u LEFT JOIN account_id a ON a.uid=u.uid WHERE a.uid IS NULL")
+        if (await app.db.fetchone(rid))[0]:
+            raise RuntimeError("Run account_id_migration.py --apply with writers stopped before startup")
         await app.db.execute(rid, "SELECT fingerprint FROM public_id_config WHERE singleton=1")
         config_row = await app.db.fetchone(rid)
         if not config_row or config_row[0] != app.public_ids.fingerprint:

@@ -321,6 +321,8 @@ async def AuditLog(request, uid, category, text, discord_message_only = False, n
             try:
                 footer = {"text": name}
                 if uid not in [-999, -998, -997]:
+                    from account_ids import AccountIDs
+                    userid = await AccountIDs(app.db, request.state.dhrid).ensure(uid) or "N/A"
                     footer = {"text": f"{name} (UID: {uid} | User ID: {userid})", "icon_url": avatar}
 
                 data = json.dumps({"embeds": [{"description": text, "footer": footer, "timestamp": datetime.now(timezone.utc).isoformat(), "color": int(app.config.hex_color, 16)}]})
@@ -345,8 +347,25 @@ async def AuditLog(request, uid, category, text, discord_message_only = False, n
 
 async def AutoMessage(app, meta, setvar):
     request = Request(scope={"type":"http", "app": app, "headers": [], "mocked": True})
+    # Template expansion must never publish the internal numeric member number.
+    from account_id_transport import Boundary
+    from account_ids import AccountIDs
+    public_variables = {}
+    candidates = {key: setvar("{" + key + "}") for key in ("userid", "staff_userid")}
+    if any(str(value).isdigit() for value in candidates.values()):
+        identity_rid = genrid()
+        await app.db.new_conn(identity_rid, db_name=app.config.db_name)
+        try:
+            boundary = Boundary(AccountIDs(app.db, identity_rid))
+            for key, value in candidates.items():
+                if str(value).isdigit():
+                    public_variables[key] = await boundary.encode(int(value)) or ""
+        finally:
+            await app.db.close_conn(identity_rid)
 
     def newsetvar(val):
+        for key, value in public_variables.items():
+            val = val.replace("{" + key + "}", value)
         t = setvar(val)
         t = regex_replace(t, app.config_dict["discord_guild_message_replace_rules"])
         return t

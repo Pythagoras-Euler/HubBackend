@@ -1,6 +1,7 @@
 # Copyright (C) 2022-2026 CharlesWithC All rights reserved.
 # Author: @CharlesWithC
 
+import asyncio
 import time
 from getpass import getpass
 
@@ -10,6 +11,8 @@ import db
 from db import genconn
 from functions import *
 from logger import logger
+from account_id_migration import MigrationDB
+from account_ids import AccountIDs
 
 
 def create_user(config, email: str, password: str):
@@ -32,10 +35,17 @@ def create_user(config, email: str, password: str):
         uid = cur.fetchone()[0]
         cur.execute(f"DELETE FROM user_password WHERE email = '{email}'")
         cur.execute(f"INSERT INTO user_password VALUES ({uid}, '{email}', '{b64e(pwdhash)}')")
+        # Use the same connection so ID allocation commits with the new account.
+        id_db = MigrationDB(conn)
+        try:
+            asyncio.run(AccountIDs(id_db, "setup-create-user").ensure(uid))
+        finally:
+            id_db.cursor.close()
         conn.commit()
 
         return uid
     except Exception as exc:
+        conn.rollback()
         return exc
     finally:
         cur.close()

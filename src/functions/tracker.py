@@ -69,9 +69,9 @@ async def add_driver(request, steamid, staff_uid, userid, username, trackers = [
             plain_error = ml.ctr(request, 'api_timeout')
 
         if resp_error != "":
-            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "failed_to_add_user_to_tracker_company", var = {"username": username, "userid": userid, "tracker": TRACKER[tracker['type']], "error": resp_error}))
+            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "failed_to_add_user_to_tracker_company", var = {"username": username, "userid": await PublicMemberID(request, userid), "tracker": TRACKER[tracker['type']], "error": resp_error}))
         else:
-            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "added_user_to_tracker_company", var = {"username": username, "userid": userid, "tracker": TRACKER[tracker['type']]}))
+            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "added_user_to_tracker_company", var = {"username": username, "userid": await PublicMemberID(request, userid), "tracker": TRACKER[tracker['type']]}))
 
         if plain_error != "":
             plain_error += "\n"
@@ -124,9 +124,9 @@ async def remove_driver(request, steamid, staff_uid, userid, username, trackers 
             plain_error = ml.ctr(request, 'api_timeout')
 
         if resp_error != "":
-            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "failed_remove_user_from_tracker_company", var = {"username": username, "userid": userid, "tracker": TRACKER[tracker['type']], "error": resp_error}))
+            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "failed_remove_user_from_tracker_company", var = {"username": username, "userid": await PublicMemberID(request, userid), "tracker": TRACKER[tracker['type']], "error": resp_error}))
         else:
-            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "removed_user_from_tracker_company", var = {"username": username, "userid": userid, "tracker": TRACKER[tracker['type']]}))
+            await AuditLog(request, staff_uid, "tracker", ml.ctr(request, "removed_user_from_tracker_company", var = {"username": username, "userid": await PublicMemberID(request, userid), "tracker": TRACKER[tracker['type']]}))
 
         if plain_error != "":
             plain_error += "\n"
@@ -134,7 +134,7 @@ async def remove_driver(request, steamid, staff_uid, userid, username, trackers 
     return all_errors
 
 async def publish_webhook(request, userid, username, discordid, logid, tracker, data, original_data, event_type, driven_distance, revenue, offence):
-    app = request.app
+    app, dhrid = request.app, request.state.dhrid
 
     try:
         source_city = data["source_city"]
@@ -212,7 +212,11 @@ async def publish_webhook(request, userid, username, discordid, logid, tracker, 
         imgurl = IMGS[k]
         if not isurl(imgurl):
             imgurl = ""
-        dhulink = app.config.frontend_urls.member.replace("{userid}", str(userid))
+        from account_id_transport import Boundary
+        from account_ids import AccountIDs
+        public_member_id = await Boundary(AccountIDs(app.db, dhrid)).encode(userid)
+        profile_template = app.config.frontend_urls.member.replace("/member/{userid}", "/u/{userid}").replace("/member?userid={userid}", "/u/{userid}")
+        dhulink = profile_template.replace("{userid}", str(public_member_id or ""))
         await app.db.execute(dhrid, "SELECT public_id FROM dlog WHERE logid=%s", (logid,))
         public_id = (await app.db.fetchone(dhrid))[0]
         dlglink = app.config.frontend_urls.delivery.replace("{logid}", "public/" + public_id)
@@ -684,7 +688,7 @@ async def process_economy(request, userid, logid, data, driven_distance, revenue
         uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
         user_language = await GetUserLanguage(request, uid)
         message = "  \n" + ml.tr(request, "economy_message_for_delivery", var = {"logid": logid}, force_lang = user_language)
-        await notification(request, "economy", uid, ml.tr(request, "economy_received_transaction", var = {"amount": driver_revenue, "currency_name": app.config.economy.currency_name, "from_user": ml.tr(request, "client"), "from_userid": "N/A", "message": message}, force_lang = user_language))
+        await notification(request, "economy", uid, ml.tr(request, "economy_received_transaction", var = {"amount": driver_revenue, "currency_name": app.config.economy.currency_name, "from_user": ml.tr(request, "client"), "from_userid": await PublicMemberID(request, "N/A"), "message": message}, force_lang = user_language))
 
         if not isrented:
             message = convertQuotation(f'dlog-{logid}/garage-{garageid}-{slotid}/revenue-{economy_revenue}')

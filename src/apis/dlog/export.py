@@ -12,6 +12,8 @@ from fastapi import Header, Request, Response
 from fastapi.responses import StreamingResponse
 
 from api import tracebackHandler
+from account_ids import AccountIDs
+from account_id_transport import Boundary
 from functions import *
 
 
@@ -81,6 +83,7 @@ async def get_export(request: Request, response: Response, authorization: str = 
     await app.db.execute(dhrid, "SELECT userid, name FROM user WHERE userid >= 0")
     t = await app.db.fetchall(dhrid)
     all_users = {}
+    public_boundary = Boundary(AccountIDs(app.db, dhrid))
     for tt in t:
         all_users[tt[0]] = tt[1]
 
@@ -363,6 +366,7 @@ async def get_export(request: Request, response: Response, authorization: str = 
                 except Exception as exc:
                     await tracebackHandler(request, exc, f"Regarding dlog #{logid}\n" + traceback.format_exc())
 
+            user_id = await public_boundary.encode(user_id)
             if not include_ids:
                 data = [logid, tracker, trackerid, game, time_submitted, start_time, stop_time, is_delivered, user_id, username, source_company, source_city, destination_company, destination_city, logged_distance, planned_distance, reported_distance, cargo, cargo_mass, cargo_damage, truck_brand, truck_name, license_plate, license_plate_country, fuel, avg_fuel, adblue, max_speed, avg_speed, revenue, expense_tollgate, expense_ferry, expense_train, expense_total, offence, net_profit, xp, division, challenge, is_special, is_late, has_police_enabled, market, multiplayer, auto_load, auto_park, warp]
             else:

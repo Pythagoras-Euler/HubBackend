@@ -12,6 +12,18 @@ from functions.security import auth, checkPerm
 from static import *
 
 
+async def PublicMemberID(request, userid):
+    """Render a business member reference without exposing its numeric key."""
+    if type(userid) is not int or userid < 0:
+        return userid
+    from account_ids import AccountIDs
+    from account_id_transport import Boundary
+    boundary = getattr(request.state, "account_id_boundary", None)
+    if boundary is None:
+        boundary = Boundary(AccountIDs(request.app.db, request.state.dhrid))
+    return await boundary.encode(userid)
+
+
 async def getHighestActiveRole(request):
     (app, dhrid) = (request.app, request.state.dhrid)
     for roleid in app.roles.keys(): # this is sorted based on the order_id

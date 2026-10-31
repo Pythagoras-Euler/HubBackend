@@ -183,7 +183,7 @@ async def patch_roles(request: Request, response: Response, userid: int, authori
             except:
                 pass
 
-    audit = ml.ctr(request, "updated_user_roles", var = {"username": username, "userid": userid}) + "  \n"
+    audit = ml.ctr(request, "updated_user_roles", var = {"username": username, "userid": await PublicMemberID(request, userid)}) + "  \n"
     upd = ""
     for add in added_roles:
         role_name = f"{ml.ctr(request, 'role')} #{add}\n"
@@ -284,7 +284,7 @@ async def patch_points(request: Request, response: Response, userid: int, author
         bonus_points = "+" + str(bonus_points)
 
     username = (await GetUserInfo(request, userid = userid))["name"]
-    await AuditLog(request, au["uid"], "member", ml.ctr(request, "updated_user_points", var = {"username": username, "userid": userid, "distance": distance, "distance_note": distance_note if distance_note != "" else "N/A", "bonus_points": bonus_points, "bonus_note": bonus_note if bonus_note != "" else "N/A"}))
+    await AuditLog(request, au["uid"], "member", ml.ctr(request, "updated_user_points", var = {"username": username, "userid": await PublicMemberID(request, userid), "distance": distance, "distance_note": distance_note if distance_note != "" else "N/A", "bonus_points": bonus_points, "bonus_note": bonus_note if bonus_note != "" else "N/A"}))
     uid = (await GetUserInfo(request, userid = userid, is_internal_function = True))["uid"]
     await notification(request, "member", uid, ml.tr(request, "point_updated", var = {"distance": distance, "bonus_points": bonus_points}, force_lang = await GetUserLanguage(request, uid)))
 

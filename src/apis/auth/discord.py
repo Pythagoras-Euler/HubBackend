@@ -113,6 +113,8 @@ async def get_callback(request: Request, response: Response, code: Optional[str]
                     uid = (await app.db.fetchone(dhrid))[0]
                     await app.db.execute(dhrid, f"INSERT INTO settings VALUES ('{uid}', 'notification', ',drivershub,login,dlog,member,application,challenge,division,economy,event,')")
                     await app.db.commit(dhrid)
+                    from account_ids import AccountIDs
+                    await AccountIDs(app.db, dhrid).ensure(uid)
                     await AuditLog(request, uid, "auth", ml.ctr(request, "discord_register", var = {"country": getRequestCountry(request)}))
                     await GetUserInfo(request, uid = uid, nocache = True) # force update cache
 

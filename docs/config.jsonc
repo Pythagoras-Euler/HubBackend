@@ -45,7 +45,7 @@
 
     // urls to various client resources; for discord messages and emails
     "frontend_urls": {
-        "member": "https://{domain}/member/{userid}",
+        "member": "https://{domain}/u/{userid}",
         "delivery": "https://{domain}/delivery/{logid}",
         "email_confirm": "https://{domain}/auth/email?secret={secret}"
     },
@@ -273,6 +273,10 @@
         // 'administrator' has all permissions except 'driver' permission
         // since 'driver' permission is also a 'driver' flag that is linked exclusively to the permission
         "administrator": [0],
+        // Private account ID history/audit, cooldown waivers, and denylist editing.
+        "view_account_id_history": [],
+        "manage_account_ids": [],
+        "manage_account_id_rules": [],
         "update_config": [],
         "reload_config": [],
         "restart_service": [],

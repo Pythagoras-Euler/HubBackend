@@ -306,7 +306,10 @@ def createApp(config_path, multi_mode = False, first_init = False, args = {}, ma
 
         app.loaded_external_plugins.append(plugin_name)
 
-    routes = apis.routes + apis.auth.routes + apis.dlog.routes + apis.member.routes + apis.user.routes
+    from account_id_transport import AccountIDRoute, install_openapi
+    from apis.user.account_id import routes as account_id_routes
+    app.router.route_class = AccountIDRoute
+    routes = apis.routes + apis.auth.routes + apis.dlog.routes + apis.member.routes + apis.user.routes + account_id_routes()
 
     # both trackers will be added and 404 will be handled within the route
     # so we can realize switching tracker without needing to restart program
@@ -342,6 +345,8 @@ def createApp(config_path, multi_mode = False, first_init = False, args = {}, ma
             if multi_mode and route.path == "/restart":
                 continue
             app.add_api_route(path=route.path, endpoint=route.endpoint, methods=route.methods, response_class=route.response_class)
+
+    install_openapi(app)
 
     app.add_exception_handler(StarletteHTTPException, api.errorHandler)
     app.add_exception_handler(RequestValidationError, api.error422Handler)

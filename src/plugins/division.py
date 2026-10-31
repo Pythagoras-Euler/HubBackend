@@ -336,7 +336,7 @@ async def post_dlog_division(request: Request, response: Response, logid: int, d
     await app.db.execute(dhrid, f"SELECT userid, name, avatar FROM user WHERE uid = {uid}")
     t = await app.db.fetchall(dhrid)
     tt = t[0]
-    msg = f"**UID**: {uid}\n**User ID**: {tt[0]}\n**Name**: {tt[1]}\n**Discord**: <@{discordid}> (`{discordid}`)\n\n"
+    msg = f"**UID**: {uid}\n**User ID**: {await PublicMemberID(request, tt[0])}\n**Name**: {tt[1]}\n**Discord**: <@{discordid}> (`{discordid}`)\n\n"
     msg += f"**Delivery ID**: [{logid}]({dlglink})\n**Division**: {app.division_name[divisionid] if divisionid in app.division_name.keys() else '/'}"
     avatar = tt[2]
 
