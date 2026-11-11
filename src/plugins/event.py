@@ -15,6 +15,7 @@ from fastapi import Header, Request, Response
 
 import multilang as ml
 from api import tracebackHandler
+from event_banner import event_banner_url
 from functions import *
 
 
@@ -491,7 +492,8 @@ async def get_list(request: Request, response: Response, authorization: str = He
                 voted = True
             else:
                 voted = False
-        ret.append({"eventid": tt[0], "title": tt[8], "link": decompress(tt[1]), "description": decompress(tt[7]),
+        description = decompress(tt[7])
+        ret.append({"eventid": tt[0], "title": tt[8], "link": decompress(tt[1]), "description": description, "banner_url": event_banner_url(description, app.config),
             "creator": await GetUserInfo(request, userid = tt[16]), \
             "departure": tt[2], "destination": tt[3], "distance": tt[4], "meetup_timestamp": tt[5], \
                 "departure_timestamp": tt[6], "points": tt[12], "is_private": TF[tt[11]], \
@@ -530,6 +532,9 @@ async def get_event(request: Request, response: Response, eventid: int, authoriz
         response.status_code = 404
         return {"error": ml.tr(request, "event_not_found", force_lang = aulanguage)}
     tt = t[0]
+    if tt[11] and userid in [-1, None]:
+        response.status_code = 404
+        return {"error": ml.tr(request, "event_not_found", force_lang = aulanguage)}
     attendee = str2list(tt[9])
     vote = str2list(tt[10])
     if userid in [-1, None]:
@@ -548,7 +553,8 @@ async def get_event(request: Request, response: Response, eventid: int, authoriz
         else:
             voted = False
 
-    return {"eventid": tt[0], "title": tt[8], "link": decompress(tt[1]), "description": decompress(tt[7]), "creator": await GetUserInfo(request, userid = tt[16]), "departure": tt[2], "destination": tt[3], "distance": tt[4], "meetup_timestamp": tt[5], "departure_timestamp": tt[6], "points": tt[12], "is_private": TF[tt[11]], "orderid": tt[13], "is_pinned": TF[tt[14]], "timestamp": tt[15], "attendees": attendee_ret, "votes": vote_ret, "voted": voted}
+    description = decompress(tt[7])
+    return {"eventid": tt[0], "title": tt[8], "link": decompress(tt[1]), "description": description, "banner_url": event_banner_url(description, app.config), "creator": await GetUserInfo(request, userid = tt[16]), "departure": tt[2], "destination": tt[3], "distance": tt[4], "meetup_timestamp": tt[5], "departure_timestamp": tt[6], "points": tt[12], "is_private": TF[tt[11]], "orderid": tt[13], "is_pinned": TF[tt[14]], "timestamp": tt[15], "attendees": attendee_ret, "votes": vote_ret, "voted": voted}
 
 async def put_vote(request: Request, response: Response, eventid: int, authorization: str = Header(None)):
     app = request.app

@@ -7785,8 +7785,11 @@
                 ],
                 "operationId": "get_event_list",
                 "security": [
+                    {},
                     {
-                        "bearerAuth": [],
+                        "bearerAuth": []
+                    },
+                    {
                         "applicationAuth": []
                     }
                 ],
@@ -7972,7 +7975,44 @@
                         "in": "query"
                     }
                 ],
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "Event data (existing fields retained).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "list": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "banner_url"
+                                                ],
+                                                "properties": {
+                                                    "banner_url": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Validated heading image URL; null when absent or invalid."
+                                                    }
+                                                },
+                                                "additionalProperties": true
+                                            }
+                                        },
+                                        "total_items": {
+                                            "type": "integer"
+                                        },
+                                        "total_pages": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Anonymous access returns public events only. Each event includes banner_url (absolute HTTP(S) URL or null), derived from the leading [Image src=\"...\"] description marker. Existing fields are unchanged. Private event details return 404 to anonymous users and non-members."
             }
         },
         "/events": {
@@ -8065,8 +8105,11 @@
                 ],
                 "operationId": "get_event",
                 "security": [
+                    {},
                     {
-                        "bearerAuth": [],
+                        "bearerAuth": []
+                    },
+                    {
                         "applicationAuth": []
                     }
                 ],
@@ -8081,7 +8124,33 @@
                         "in": "path"
                     }
                 ],
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "Event data (existing fields retained).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "banner_url"
+                                    ],
+                                    "properties": {
+                                        "banner_url": {
+                                            "type": "string",
+                                            "nullable": true,
+                                            "description": "Validated heading image URL; null when absent or invalid."
+                                        }
+                                    },
+                                    "additionalProperties": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Event not found or not visible to this caller."
+                    }
+                },
+                "description": "Anonymous access returns public events only. Each event includes banner_url (absolute HTTP(S) URL or null), derived from the leading [Image src=\"...\"] description marker. Existing fields are unchanged. Private event details return 404 to anonymous users and non-members."
             },
             "patch": {
                 "summary": "Update Event",
